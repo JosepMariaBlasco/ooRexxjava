@@ -6,15 +6,18 @@ WASI, and run on any Java virtual machine by
 [Chicory](https://github.com/dylibso/chicory), a WebAssembly runtime
 written in pure Java (no JNI, no native code).
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13289, built
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13346 (the
+ooRexx family's revision), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Chicory 1.7.5: multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
 conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
 `rxregexp` behave as in native ooRexx, and the Rexx Parser parsing its
 own sources produces an element dump byte-for-byte identical to
 native, about 3.4 times slower. Not available yet: commands, sockets,
-Java from Rexx, HALT (Ctrl-C). The full report is in
-[`docs/poc-20261101.md`](docs/poc-20261101.md).
+Java from Rexx, HALT (Ctrl-C). ooRexx's official test suite (test/trunk
+r13347): 353 of 405 test groups pass (`results/suite-jvm-r13346.csv`).
+The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
+(written on r13289).
 
 ## Building
 
@@ -23,9 +26,10 @@ Java from Rexx, HALT (Ctrl-C). The full report is in
 ```
 
 Needs `svn`, `cmake`, `make`, Java 11 or later and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13289 from SourceForge,
-[`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s base
-patch from the commit `OOREXXWASM_REV` in `build.sh`, Maven Central).
+access (wasi-sdk 34, ooRexx trunk r13346 from SourceForge,
+[`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
+WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
+commit `OOREXXWASM_REV` in `build.sh`, Maven Central).
 The result is `dist/`, self-contained: `dist/rexxj program.rex` runs a
 Rexx program.
 
@@ -46,7 +50,7 @@ downloads and the patched sources.
 | Path | What |
 |---|---|
 | `build.sh` | Rebuilds everything from scratch. |
-| `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch, applied on top of `oorexxwasm`'s `patches/0001-wasm-build-and-base-runtime.patch`. |
+| `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks. |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
