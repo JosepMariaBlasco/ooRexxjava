@@ -25,8 +25,9 @@ Java from Rexx, HALT (Ctrl-C). The full report is in
 Needs `svn`, `cmake`, `make`, Java 11 or later and Maven, and network
 access (wasi-sdk 34, ooRexx trunk r13289 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s base
-patch from the commit `OOREXXWASM_REV` in `build.sh`, Maven Central). The result is `dist/`, self-contained:
-`dist/rexxj program.rex` runs a Rexx program.
+patch from the commit `OOREXXWASM_REV` in `build.sh`, Maven Central).
+The result is `dist/`, self-contained: `dist/rexxj program.rex` runs a
+Rexx program.
 
 | In `dist/` | What |
 |---|---|
@@ -34,7 +35,8 @@ patch from the commit `OOREXXWASM_REV` in `build.sh`, Maven Central). The result
 | `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Chicory's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
 | `rexx.wasm` | The interpreter as WebAssembly. Not needed by `rexxj`; `java -jar rexxj.jar rexx.wasm program.rex` translates it at start-up instead. |
 | `rexx.img` | The interpreter's image. |
-| `rxregexp.cls` | The Rexx side of `rxregexp`, embedded in the interpreter. |
+| `rxregexp.cls` | The Rexx side of `rxregexp` (the native side, like `rxmath` and `hostemu`, is embedded in the interpreter). |
+| `json.cls`, `yaml.cls`, `logicalwrapper.cls`, `dateparser.cls`, `csvStream.cls` | The extensions written in Rexx alone. |
 
 Running `build.sh` again over the same work directory reuses the
 downloads and the patched sources.
@@ -50,6 +52,7 @@ downloads and the patched sources.
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `t.cpp`). |
 | `docs/` | Reports. |
+| `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). |
 
 ## Trademarks and Legal Notices
 
