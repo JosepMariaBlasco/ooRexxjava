@@ -20,8 +20,13 @@ data queues, registrations, the macrospace) is shared between processes,
 as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). Not available yet: sockets, Java from Rexx, HALT
 (Ctrl-C). ooRexx's official test suite (test/trunk
-r13347): 379 of 405 test groups pass (`results/suite-jvm-r13346-cmd.csv`;
-353 before commands, `suite-jvm-r13346.csv`).
+r13347), run with `dist-test/` (`build-test.sh`, the variant with the
+suite's native libraries): 388 of 405 test groups pass
+(`results/suite-jvm-r13346-rxapi.csv`; four of the failures, `BEEP`,
+`RexxContext`, `TRACE`, `TRACE_TraceObject`, depend on timing and pass when
+run again). Before: 384 with the native libraries but without the shared
+API server (`suite-jvm-r13346-api.csv`), 379 with commands
+(`suite-jvm-r13346-cmd.csv`), 353 before commands (`suite-jvm-r13346.csv`).
 The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 (written on r13289).
 
