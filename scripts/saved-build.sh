@@ -10,8 +10,9 @@
 #                                    MANIFEST matches this checkout; exit 1 if not
 #
 # Two packs: oorexxjava-dist.tar.gz (dist/: rexxj and its jar, rexx.wasm,
-# rexx.img, the .cls files, the samples) is enough to run programs and the test
-# suite; oorexxjava-tree.tar.gz (the patched ooRexx source and the CMake build
+# rexx.img, the .cls files, the samples; and dist-test/, build-test.sh's
+# variant with the test suite's native libraries) is enough to run programs and
+# the test suite; oorexxjava-tree.tar.gz (the patched ooRexx source and the CMake build
 # tree) makes ./build.sh WORK incremental, so that a change in C recompiles only
 # what it touches.  The build tree holds absolute paths: it only works at the
 # WORK it was saved from (MANIFEST says which), /home/claude/work by default.
@@ -22,7 +23,7 @@ CMD=${1:?usage: saved-build.sh manifest|save|publish|fetch [WORK]}
 WORK=${2:-/home/claude/work}
 BRANCH=saved-build
 # what the build is made from: every tracked file it reads, by content
-INPUTS="build.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host"
+INPUTS="build.sh build-test.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host"
 
 manifest() {
   echo "work $WORK"
@@ -36,7 +37,8 @@ save)
   [ -x "$WORK/dist/rexxj" ] || { echo "no build in $WORK/dist" >&2; exit 1; }
   rm -rf "$WORK/saved" && mkdir -p "$WORK/saved"
   manifest > "$WORK/saved/MANIFEST"
-  tar -C "$WORK" -czf "$WORK/saved/oorexxjava-dist.tar.gz" dist
+  [ -x "$WORK/dist-test/rexxj" ] || { echo "no test variant: ./build-test.sh $WORK" >&2; exit 1; }
+  tar -C "$WORK" -czf "$WORK/saved/oorexxjava-dist.tar.gz" dist dist-test
   tar -C "$WORK" -czf "$WORK/saved/oorexxjava-tree.tar.gz" oorexx build toolchain.cmake
   ls -l "$WORK/saved" ;;
 publish)
@@ -62,7 +64,7 @@ fetch)
     rm -rf "$T"; exit 1
   fi
   mkdir -p "$WORK"
-  rm -rf "$WORK/dist" "$WORK/oorexx" "$WORK/build"
+  rm -rf "$WORK/dist" "$WORK/dist-test" "$WORK/oorexx" "$WORK/build"
   tar -C "$WORK" -xzf "$T/oorexxjava-dist.tar.gz"
   tar -C "$WORK" -xzf "$T/oorexxjava-tree.tar.gz"
   # the clone's files are newer than the saved objects (checkout time), and

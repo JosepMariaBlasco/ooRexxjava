@@ -51,6 +51,20 @@ Rexx program.
 Running `build.sh` again over the same work directory reuses the
 downloads and the patched sources.
 
+### The variant for the test suite
+
+```bash
+./build-test.sh [work-directory]
+```
+
+after `build.sh`, builds `dist-test/`: `dist/` with the test suite's native
+libraries (`testbinaries/`: `orxfunction`, `orxmethod`, `orxclassic`,
+`orxclassic1`, `orxexits`, `orxinvocation`) linked into `rexx.wasm`, since
+WebAssembly has no `dlopen`, and `testbinaries/rexxinstance` as one more tool
+(`dist-test/rexxinstance`, that is, `rexxj --orx-wasm-rexxinstance`). It is
+`oorexxwasm`'s `wasm/build-test.sh` (its patch 0007) for WASI, and it is for
+the API test groups only: run the suite with `dist-test/rexxj`.
+
 ### The saved build
 
 The branch `saved-build` holds the last build (binaries, not sources: one
@@ -61,8 +75,8 @@ compile:
 scripts/saved-build.sh fetch [work-directory]   # default: /home/claude/work
 ```
 
-restores `dist/` and the build tree when its `MANIFEST` (the hashes of
-`build.sh`, the patch, the toolchain file, `compat/` and `host/`) matches
+restores `dist/`, `dist-test/` and the build tree when its `MANIFEST` (the hashes of
+`build.sh`, `build-test.sh`, the patch, the toolchain file, `compat/` and `host/`) matches
 the checkout, and fails otherwise; `build.sh` over the same directory is
 then incremental. The build tree holds absolute paths: it is only reusable
 at the directory it was built in. After a build, `scripts/saved-build.sh
@@ -73,6 +87,7 @@ save` and `publish` replace it.
 | Path | What |
 |---|---|
 | `build.sh` | Rebuilds everything from scratch. |
+| `build-test.sh` | Builds `dist-test/`, the variant with the test suite's native libraries. |
 | `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`). |
