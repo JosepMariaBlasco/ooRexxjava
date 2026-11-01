@@ -13,7 +13,7 @@ conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
 `rxregexp` behave as in native ooRexx, and the Rexx Parser parsing its
 own sources produces an element dump byte-for-byte identical to
 native, about 3.4 times slower. Not available yet: commands, sockets,
-Java from Rexx, HALT (Ctrl-C). The full report, in Spanish, is in
+Java from Rexx, HALT (Ctrl-C). The full report is in
 [`docs/poc-20261101.md`](docs/poc-20261101.md).
 
 ## Building
