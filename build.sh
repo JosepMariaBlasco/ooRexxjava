@@ -29,6 +29,8 @@ cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_
   -DCMAKE_CROSSCOMPILING_EMULATOR="$WORK/runwasm"
 cmake --build build --target rexx_exe rexx_img -j"$(nproc)"
 mkdir -p dist && cp build/bin/rexx dist/rexx.wasm && cp build/bin/rexx.img dist/
+# the Rexx side of the embedded native packages (::requires "rxregexp.cls")
+cp oorexx/extensions/rxregexp/rxregexp.cls dist/
 printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m -jar %s "$D/rexx.wasm" "$@"\n' "$JAR" > dist/rexxj
 chmod +x dist/rexxj
 echo "done: $WORK/dist/rexxj program.rex"
