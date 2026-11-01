@@ -95,6 +95,7 @@ public final class RunWasm {
         imports = ImportValues.builder()
             .addFunction(wasi.toHostFunctions())
             .addFunction(spawn)
+            .addFunction(Host.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
         machine = interp ? null

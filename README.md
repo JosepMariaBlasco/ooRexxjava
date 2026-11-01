@@ -13,8 +13,11 @@ Chicory 1.7.5: multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
 conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
 `rxregexp` behave as in native ooRexx, and the Rexx Parser parsing its
 own sources produces an element dump byte-for-byte identical to
-native, about 3.4 times slower. Not available yet: commands, sockets,
-Java from Rexx, HALT (Ctrl-C). ooRexx's official test suite (test/trunk
+native, about 3.4 times slower. External commands (`ADDRESS SYSTEM`,
+`ADDRESS PATH`, `ADDRESS ... WITH` redirection) run as processes of the
+host through Java's `ProcessBuilder`. Not available yet: sockets, Java
+from Rexx, HALT (Ctrl-C), queues shared between processes (no `rxapi`
+daemon). ooRexx's official test suite (test/trunk
 r13347): 353 of 405 test groups pass (`results/suite-jvm-r13346.csv`).
 The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 (written on r13289).
@@ -36,6 +39,7 @@ Rexx program.
 | In `dist/` | What |
 |---|---|
 | `rexxj` | The launcher script. |
+| `rexx`, `rexxc`, `rxqueue`, `rxsubcom` | The usual names, as commands: `rexx` is `rexxj`; the utilities are in the interpreter's binary (`rexxj --orx-wasm-rexxc` ...). |
 | `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Chicory's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
 | `rexx.wasm` | The interpreter as WebAssembly. Not needed by `rexxj`; `java -jar rexxj.jar rexx.wasm program.rex` translates it at start-up instead. |
 | `rexx.img` | The interpreter's image. |
@@ -51,12 +55,12 @@ downloads and the patched sources.
 |---|---|
 | `build.sh` | Rebuilds everything from scratch. |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
-| `compat/` | Headers and stubs for what wasi-libc lacks. |
+| `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `t.cpp`). |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `t.cpp`). |
 | `docs/` | Reports. |
-| `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). |
+| `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |
 
 ## Trademarks and Legal Notices
 
