@@ -9,8 +9,10 @@ static inline uid_t getuid(void) { return 0; }
 static inline uid_t geteuid(void) { return 0; }
 static inline gid_t getgid(void) { return 0; }
 static inline gid_t getegid(void) { return 0; }
+/* the real process ids, from the host (orx_wasi_host.c): the shared Rexx API
+   server keys sessions by process id */
+pid_t getppid(void);
 /* no process tree, no priorities, no fork in WASI preview 1 */
-static inline pid_t getppid(void) { return 1; }
 static inline pid_t getpgid(pid_t p) { (void)p; return 1; }
 #define PRIO_PROCESS 0
 #define PRIO_PGRP 1

@@ -1,13 +1,15 @@
 diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
 --- oorexx.ref/CMakeLists.txt
 +++ oorexx/CMakeLists.txt
-@@ -689,8 +689,13 @@
+@@ -689,8 +689,15 @@
              ${build_platform_dir}/verinfo.rc)
     set (platform_rexxapi_libs wsock32)
  else ()
 +   if (ORX_WASI)
-+      # no sockets: the API server is reached in-process (SysLoopbackConnection)
-+      set (platform_rexxapi_sources)
++      # the API server shared between processes over the host's connections
++      # (SysHostConnection), or reached in-process (SysLoopbackConnection)
++      set (platform_rexxapi_sources
++            ${build_rexxapi_common_platform_dir}/SysHostConnection.cpp)
 +   else ()
     set (platform_rexxapi_sources
              ${build_rexxapi_common_platform_dir}/SysCSStream.cpp)
@@ -93,3 +95,394 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp oorexx/inte
  }
  
  
+diff -ruN oorexx.ref/rexxapi/client/LocalAPIManager.cpp oorexx/rexxapi/client/LocalAPIManager.cpp
+--- oorexx.ref/rexxapi/client/LocalAPIManager.cpp
++++ oorexx/rexxapi/client/LocalAPIManager.cpp
+@@ -246,7 +246,11 @@
+         SysThread::sleep(50);
+ 
+         // now loop multiple times, with a sleep interval, until we finally connect.
++#if defined(__wasi__)
++        int count = 1000;    // the daemon is a JVM: it needs longer than rxapi to start
++#else
+         int count = 200;
++#endif
+         while (count-- > 0)
+         {
+             try
+@@ -273,6 +277,16 @@
+             // second delay on every launch, but that really should not happen.
+             SysThread::sleep(10);
+         }
++#if defined(__wasi__)
++        // the shared server could not be reached: run with the in-process one
++        // (not shared with other processes) rather than fail
++        if (SysLocalAPIManager::fallBackToInProcessServer())
++        {
++            connectionEstablished = false;
++            establishServerConnection();
++            return;
++        }
++#endif
+         throw new ServiceException(API_FAILURE, "Object REXX API Manager could not be started.  This could be due to a version conflict!");
+     }
+ }
+diff -ruN oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.cpp oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
+--- oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
++++ oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
+@@ -52,6 +52,45 @@
+ #if defined(ORX_WASM)
+ #include "SysLoopbackConnection.hpp"
+ #endif
++#if defined(__wasi__)
++#include "SysHostConnection.hpp"
++#include <stdlib.h>
++#include <strings.h>
++
++// WASI: use the in-process server instead of the shared one (the host cannot
++// give connections, ORX_WASM_RXAPI=inprocess, or the daemon could not be
++// started or reached)
++bool SysLocalAPIManager::useInProcessServer = false;
++
++/**
++ * WASI: give up on the shared server and switch to the in-process one.
++ *
++ * @return true if this is a change (the caller can retry the connection).
++ */
++bool SysLocalAPIManager::fallBackToInProcessServer()
++{
++    if (useInProcessServer)
++    {
++        return false;
++    }
++    useInProcessServer = true;
++    return true;
++}
++
++/**
++ * WASI: whether to use the shared server at all.
++ */
++static bool sharedServer()
++{
++    static int shared = -1;
++    if (shared < 0)
++    {
++        const char *mode = getenv("ORX_WASM_RXAPI");
++        shared = (mode == NULL || strcasecmp(mode, "inprocess") != 0) && orxWasiApiAvailable() ? 1 : 0;
++    }
++    return shared == 1 && !SysLocalAPIManager::useInProcessServer;
++}
++#endif
+ 
+ #ifdef AIX
+ extern "C"
+@@ -76,7 +115,14 @@
+  */
+ void SysLocalAPIManager::startServerProcess()
+ {
+-#if defined(ORX_WASM)
++#if defined(__wasi__)
++    // the daemon, `rexx --orx-wasm-rxapi`, launched detached by the host; if
++    // it cannot be, the in-process server
++    if (!sharedServer() || orxWasiApiStartServer() != 0)
++    {
++        useInProcessServer = true;
++    }
++#elif defined(ORX_WASM)
+     throw new ServiceException(API_FAILURE, "rxapi service is unavailable in the WASM profile");
+ #else
+ #define RXAPI "rxapi"
+@@ -195,6 +241,18 @@
+  */
+ ApiConnection *SysLocalAPIManager::newClientConnection()
+ {
++#if defined(__wasi__)
++    if (sharedServer())
++    {
++        SysHostConnection *hostConnection = new SysHostConnection();
++        if (!hostConnection->connect())
++        {
++            delete hostConnection;
++            throw new ServiceException(CONNECTION_FAILURE, "Failure connecting to rxapi server");
++        }
++        return hostConnection;
++    }
++#endif
+ #if defined(ORX_WASM)
+     // no rxapi daemon in a WASM process: talk to the server linked in-process
+     return new SysLoopbackConnection();
+diff -ruN oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.hpp oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.hpp
+--- oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.hpp
++++ oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.hpp
+@@ -48,6 +48,10 @@
+     static bool getActiveSessionQueue(QueueHandle &sessionQueue);
+     static void setActiveSessionQueue(QueueHandle sessionQueue);
+     static ApiConnection *newClientConnection();
++#if defined(__wasi__)
++    static bool fallBackToInProcessServer();
++    static bool useInProcessServer;
++#endif
+ };
+ 
+ #endif
+diff -ruN oorexx.ref/rexxapi/common/platform/unix/SysHostConnection.cpp oorexx/rexxapi/common/platform/unix/SysHostConnection.cpp
+--- oorexx.ref/rexxapi/common/platform/unix/SysHostConnection.cpp
++++ oorexx/rexxapi/common/platform/unix/SysHostConnection.cpp
+@@ -0,0 +1,149 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.         */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++/**
++ * WASI: connections to the shared Rexx API server; see SysHostConnection.hpp.
++ */
++
++#include "SysHostConnection.hpp"
++#include "APIServer.hpp"
++#include "oorexxapi.h"
++#include <stdio.h>
++#include <string.h>
++
++/**
++ * The server's name for this interpreter version (as rxapi's socket name
++ * carries none, versions that speak another protocol would meet: the name
++ * keeps them apart).
++ */
++const char *SysHostConnection::serviceName()
++{
++    static char name[64] = "";
++    if (name[0] == '\0')
++    {
++        snprintf(name, sizeof(name), "rxapi-%d.%d.%d-%d", ORX_VER, ORX_REL, ORX_MOD, REXXAPI_VERSION);
++    }
++    return name;
++}
++
++
++bool SysHostConnection::connect()
++{
++    handle = orxWasiApiConnect(serviceName());
++    errcode = handle < 0 ? CSERROR_OPEN_FAILED : CSERROR_OK;
++    return handle >= 0;
++}
++
++
++bool SysHostConnection::read(void *buf, size_t bufsize, size_t *bytesread)
++{
++    long actual = handle < 0 ? -1 : orxWasiApiRead(handle, buf, bufsize);
++    if (actual < 0)
++    {
++        errcode = CSERROR_IO_FAILED;
++        return false;
++    }
++    *bytesread = (size_t)actual;
++    errcode = CSERROR_OK;
++    return true;
++}
++
++
++bool SysHostConnection::write(void *buf, size_t bufsize, size_t *byteswritten)
++{
++    long actual = handle < 0 ? -1 : orxWasiApiWrite(handle, buf, bufsize);
++    if (actual < 0)
++    {
++        errcode = CSERROR_IO_FAILED;
++        return false;
++    }
++    *byteswritten = (size_t)actual;
++    errcode = CSERROR_OK;
++    return true;
++}
++
++
++bool SysHostConnection::write(void *buf, size_t bufsize, void *buf2, size_t buf2size, size_t *byteswritten)
++{
++    size_t first = 0, second = 0;
++    if (!write(buf, bufsize, &first))
++    {
++        return false;
++    }
++    if (buf2size > 0 && !write(buf2, buf2size, &second))
++    {
++        return false;
++    }
++    *byteswritten = first + second;
++    return true;
++}
++
++
++bool SysHostConnection::disconnect()
++{
++    if (handle >= 0)
++    {
++        orxWasiApiClose(handle);
++        handle = -1;
++    }
++    return true;
++}
++
++
++bool SysHostServerConnectionManager::bind()
++{
++    handle = orxWasiApiListen(SysHostConnection::serviceName());
++    errcode = handle < 0 ? CSERROR_OPEN_FAILED : CSERROR_OK;
++    return handle >= 0;
++}
++
++
++ApiConnection *SysHostServerConnectionManager::acceptConnection()
++{
++    int client = handle < 0 ? -1 : orxWasiApiAccept(handle);
++    if (client < 0)
++    {
++        errcode = CSERROR_IO_FAILED;
++        return NULL;
++    }
++    errcode = CSERROR_OK;
++    return new SysHostConnection(client);
++}
++
++
++bool SysHostServerConnectionManager::disconnect()
++{
++    if (handle >= 0)
++    {
++        orxWasiApiClose(handle);
++        handle = -1;
++    }
++    return true;
++}
++
++
++/**
++ * rexx --orx-wasm-rxapi: the daemon (APIService.cpp's main, over the host's
++ * connections).  Returns at once, with 1, if another daemon already serves.
++ */
++int orxWasiRxapiMain()
++{
++    SysHostServerConnectionManager *c = new SysHostServerConnectionManager();
++    if (!c->bind())
++    {
++        delete c;
++        return 1;
++    }
++    APIServer *server = new APIServer();
++    server->initServer(c);
++    server->listenForConnections();
++    server->terminateServer();
++    return 0;
++}
+diff -ruN oorexx.ref/rexxapi/common/platform/unix/SysHostConnection.hpp oorexx/rexxapi/common/platform/unix/SysHostConnection.hpp
+--- oorexx.ref/rexxapi/common/platform/unix/SysHostConnection.hpp
++++ oorexx/rexxapi/common/platform/unix/SysHostConnection.hpp
+@@ -0,0 +1,77 @@
++/*----------------------------------------------------------------------------*/
++/*                                                                            */
++/* Copyright (c) 2026 Rexx Language Association. All rights reserved.         */
++/*                                                                            */
++/* This program and the accompanying materials are made available under       */
++/* the terms of the Common Public License v1.0 which accompanies this         */
++/* distribution. A copy is also available at the following address:           */
++/* https://www.oorexx.org/license.html                                        */
++/*                                                                            */
++/*----------------------------------------------------------------------------*/
++/**
++ * WASI: the Rexx API server shared between processes, as natively, over
++ * stream connections that the host gives the module (the JVM launcher: Unix
++ * domain sockets).  The server is the same executable run as a daemon
++ * (rexx --orx-wasm-rxapi), started on first use as rxapi is; the host
++ * functions below say whether the host can do it at all, and if it cannot,
++ * the client falls back to the in-process server (SysLoopbackConnection),
++ * not shared with other processes.  ORX_WASM_RXAPI=inprocess asks for that
++ * fallback from the start.
++ */
++
++#ifndef SysHostConnection_Included
++#define SysHostConnection_Included
++
++#include "ServiceMessage.hpp"
++#include <stddef.h>
++
++extern "C"
++{
++// The host's stream connections, by handle (>= 0; -1: failure).  The
++// service is the name of the server for this interpreter version: the host
++// makes it a path of its own (a socket only this user can open).
++int orxWasiApiAvailable(void);                    // 1: the host can do this
++int orxWasiApiConnect(const char *service);
++int orxWasiApiListen(const char *service);        // -1 also if a server has it
++int orxWasiApiAccept(int handle);
++long orxWasiApiRead(int handle, void *buf, size_t size);         // 0: closed
++long orxWasiApiWrite(int handle, const void *buf, size_t size);  // all, or -1
++void orxWasiApiClose(int handle);
++int orxWasiApiStartServer(void);                  // launch the daemon, detached
++}
++
++
++class SysHostConnection : public ApiConnection
++{
++public:
++    inline SysHostConnection(int h = -1) : handle(h), ApiConnection() { }
++    inline ~SysHostConnection() { disconnect(); }
++
++    static const char *serviceName();
++    bool connect();
++
++    bool read(void *buf, size_t bufsize, size_t *bytesread) override;
++    bool write(void *buf, size_t bufsize, size_t *byteswritten) override;
++    bool write(void *buf, size_t bufsize, void *buf2, size_t buf2size, size_t *byteswritten) override;
++    bool disconnect() override;
++
++protected:
++    int handle;
++};
++
++
++class SysHostServerConnectionManager : public ServerConnectionManager
++{
++public:
++    inline SysHostServerConnectionManager() : handle(-1) { }
++    inline ~SysHostServerConnectionManager() { disconnect(); }
++
++    bool bind();
++    ApiConnection *acceptConnection() override;
++    bool disconnect() override;
++
++protected:
++    int handle;
++};
++
++#endif
+diff -ruN oorexx.ref/utilities/rexx/platform/unix/rexx.cpp oorexx/utilities/rexx/platform/unix/rexx.cpp
+--- oorexx.ref/utilities/rexx/platform/unix/rexx.cpp
++++ oorexx/utilities/rexx/platform/unix/rexx.cpp
+@@ -61,6 +61,10 @@
+ int orxWasmRxqueueMain(int argc, char **argv);
+ int orxWasmRxsubcomMain(int argc, char **argv, char **envp);
+ extern char **environ;
++#if defined(__wasi__)
++// the shared Rexx API server (rexxapi/common/platform/unix/SysHostConnection.cpp)
++int orxWasiRxapiMain();
++#endif
+ // more tools a particular build links in (wasm/build-test.sh: the test
+ // suite's rexxinstance); a weak symbol, NULL in the builds that have none.
+ // Returns true, with the tool's return code in *rc, if it knows the tool.
+@@ -108,6 +112,12 @@
+         {
+             return orxWasmRxsubcomMain(argc - 1, argv + 1, environ);
+         }
++#if defined(__wasi__)
++        if (strcmp(tool, "rxapi") == 0)
++        {
++            return orxWasiRxapiMain();
++        }
++#endif
+         if (orxWasmExtraTool != NULL && orxWasmExtraTool(tool, argc - 1, argv + 1, &rc))
+         {
+             return rc;

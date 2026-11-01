@@ -15,9 +15,11 @@ conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
 own sources produces an element dump byte-for-byte identical to
 native, about 3.4 times slower. External commands (`ADDRESS SYSTEM`,
 `ADDRESS PATH`, `ADDRESS ... WITH` redirection) run as processes of the
-host through Java's `ProcessBuilder`. Not available yet: sockets, Java
-from Rexx, HALT (Ctrl-C), queues shared between processes (no `rxapi`
-daemon). ooRexx's official test suite (test/trunk
+host through Java's `ProcessBuilder`. The Rexx API server (external
+data queues, registrations, the macrospace) is shared between processes,
+as natively, through a daemon that is the launcher itself (see *The shared
+API server* below). Not available yet: sockets, Java from Rexx, HALT
+(Ctrl-C). ooRexx's official test suite (test/trunk
 r13347): 379 of 405 test groups pass (`results/suite-jvm-r13346-cmd.csv`;
 353 before commands, `suite-jvm-r13346.csv`).
 The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
@@ -82,6 +84,26 @@ then incremental. The build tree holds absolute paths: it is only reusable
 at the directory it was built in. After a build, `scripts/saved-build.sh
 save` and `publish` replace it.
 
+## The shared API server
+
+As natively, the first interpreter that needs the Rexx API server (an
+external queue, a registration, the macrospace) starts it, and it outlives
+the session: it is the launcher run as `rexx --orx-wasm-rxapi` (the same
+Java, the same jar), detached, in a session of its own if `setsid` is
+there. Interpreters reach it over a Unix domain socket in `java.io.tmpdir`,
+`.ooRexx-jvm-<user>-rxapi-<version>`, that only the user can open, with a
+`.lock` beside it that keeps a second daemon from starting. The C side is
+in the WASI patch (`rexxapi/common/platform/unix/SysHostConnection.cpp`),
+the Java side in `host/.../RxApi.java`; the server keys sessions by
+process id, so `getpid()` and `getppid()` give the real ones.
+
+If the JVM is older than 16 (no Unix domain sockets), the daemon cannot
+be started or reached, or `ORX_WASM_RXAPI=inprocess` is set, each
+interpreter uses a server of its own, inside the process, as `oorexxwasm`
+does in the browser: queues are then not shared with other processes.
+To stop the daemon, kill the process (`pkill -f orx-wasm-rxapi`); after a
+rebuild, do so, or it goes on running the old jar.
+
 ## Contents
 
 | Path | What |
@@ -93,7 +115,7 @@ save` and `publish` replace it.
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `t.cpp`). |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`). |
 | `docs/` | Reports. |
 | `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |
 

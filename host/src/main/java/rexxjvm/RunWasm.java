@@ -29,6 +29,8 @@ public final class RunWasm {
     static ImportValues imports;
     static Function<Instance, Machine> machine;   // null: interpreter
     static final AtomicInteger nextTid = new AtomicInteger(1);
+    /** The module file given on the command line; null: the embedded one. */
+    static String wasmFile;
     /**
      * Java stack for every thread that runs wasm code. Chicory's frames live on it, so
      * deep Rexx recursion needs far more than Java's default (the suite's CALL group
@@ -57,6 +59,7 @@ public final class RunWasm {
             argv.add(0, "rexx");
         } else {
             embedded = null;
+            wasmFile = new File(args[0]).getAbsolutePath();
             module = Parser.parse(new File(args[0]));
             argv.set(0, new File(args[0]).getName());
         }
@@ -96,6 +99,7 @@ public final class RunWasm {
             .addFunction(wasi.toHostFunctions())
             .addFunction(spawn)
             .addFunction(Host.functions().toArray(new HostFunction[0]))
+            .addFunction(RxApi.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
         machine = interp ? null

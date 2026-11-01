@@ -5,8 +5,13 @@
  *
  * External commands run as processes of the JVM's host (ProcessBuilder);
  * .RexxInfo~executable and ~libraryPath come from the launcher.
+ * Below them, what the WASI patch adds: the real process ids, and the
+ * connections to the Rexx API server shared between processes.
  * The contract (arguments, flags, return values) is SysWasmHost.hpp's.
  */
+
+#include <stddef.h>
+#include <sys/types.h>
 
 #define RXJ_IMPORT(name) __attribute__((import_module("rexxjvm"), import_name(#name)))
 
@@ -21,6 +26,24 @@ RXJ_IMPORT(executable_path)
 int rxj_executable_path(char *buf, int size);
 RXJ_IMPORT(library_directory)
 int rxj_library_directory(char *buf, int size);
+RXJ_IMPORT(process_id)
+int rxj_process_id(int parent);
+RXJ_IMPORT(api_available)
+int rxj_api_available(void);
+RXJ_IMPORT(api_connect)
+int rxj_api_connect(const char *service);
+RXJ_IMPORT(api_listen)
+int rxj_api_listen(const char *service);
+RXJ_IMPORT(api_accept)
+int rxj_api_accept(int handle);
+RXJ_IMPORT(api_read)
+int rxj_api_read(int handle, void *buf, int size);
+RXJ_IMPORT(api_write)
+int rxj_api_write(int handle, const void *buf, int size);
+RXJ_IMPORT(api_close)
+void rxj_api_close(int handle);
+RXJ_IMPORT(api_start_server)
+int rxj_api_start_server(void);
 
 int orxWasmCommandRun(char **argv, char **envp, const char *cwd,
                       const char *input, int inputLength, int flags)
@@ -47,3 +70,37 @@ int orxWasmLibraryDirectory(char *buf, int size)
 {
     return rxj_library_directory(buf, size);
 }
+
+/* The real process ids (libwasi-emulated-getpid's getpid() is a constant:
+   every process would be the same session of the shared API server). */
+pid_t getpid(void)
+{
+    static pid_t pid = 0;
+    if (pid == 0)
+    {
+        pid = (pid_t)rxj_process_id(0);
+    }
+    return pid;
+}
+
+pid_t getppid(void)
+{
+    return (pid_t)rxj_process_id(1);
+}
+
+/* The shared Rexx API server's connections (the WASI patch's
+   SysHostConnection.hpp), over the launcher's Unix domain sockets. */
+int orxWasiApiAvailable(void) { return rxj_api_available(); }
+int orxWasiApiConnect(const char *service) { return rxj_api_connect(service); }
+int orxWasiApiListen(const char *service) { return rxj_api_listen(service); }
+int orxWasiApiAccept(int handle) { return rxj_api_accept(handle); }
+long orxWasiApiRead(int handle, void *buf, size_t size)
+{
+    return rxj_api_read(handle, buf, size > 0x40000000 ? 0x40000000 : (int)size);
+}
+long orxWasiApiWrite(int handle, const void *buf, size_t size)
+{
+    return rxj_api_write(handle, buf, (int)size);
+}
+void orxWasiApiClose(int handle) { rxj_api_close(handle); }
+int orxWasiApiStartServer(void) { return rxj_api_start_server(); }
