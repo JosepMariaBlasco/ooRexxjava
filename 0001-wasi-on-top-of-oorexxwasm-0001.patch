@@ -1,6 +1,6 @@
-diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
---- oorexx/CMakeLists.txt	2026-11-01 14:19:07.378474873 +0100
-+++ /home/claude/ext/jvm/src/oorexx/CMakeLists.txt	2026-11-01 13:56:10.944232588 +0100
+diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
+--- oorexx.ref/CMakeLists.txt	2026-11-01 15:45:18.018064198 +0100
++++ oorexx/CMakeLists.txt	2026-11-01 15:45:25.195873367 +0100
 @@ -177,13 +177,21 @@
  set (ORX_VERSION ${ORX_CURRENT}.${ORX_AGE}.${ORX_REVISION})
  
@@ -51,7 +51,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
    # No rxapi daemon in a WASM process: the API server (queues, registrations,
    # macrospace) is linked in and reached through SysLoopbackConnection.
    add_library(rexxapi STATIC
-@@ -975,10 +988,18 @@
+@@ -975,10 +988,20 @@
  endif ()
  
  # Library definition
@@ -66,12 +66,14 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
 +              ${build_extensions_rxregexp_dir}/automaton.cpp
 +              ${build_extensions_rxregexp_dir}/dblqueue.cpp
 +              ${build_extensions_rxregexp_dir}/rxregexp.cpp
-+              ${build_extensions_rxmath_dir}/rxmath.cpp)
++              ${build_extensions_rxmath_dir}/rxmath.cpp
++              ${build_extensions_hostemu_platform_dir}/hostemu.cpp
++              ${build_extensions_hostemu_dir}/cmdparse.cpp)
 +  else ()
    set (wasm_embedded_package_sources
                ${build_extensions_rxsock_dir}/rxsock.cpp
                ${build_extensions_rxsock_dir}/rxsockfn.cpp
-@@ -989,6 +1010,7 @@
+@@ -989,6 +1012,7 @@
                ${build_extensions_hostemu_platform_dir}/hostemu.cpp
                ${build_extensions_hostemu_dir}/cmdparse.cpp
                ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
@@ -79,7 +81,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
    set_source_files_properties(${wasm_embedded_package_sources}
                PROPERTIES COMPILE_DEFINITIONS ORX_EMBEDDED_PACKAGE)
    add_library(rexx STATIC
-@@ -1091,13 +1113,18 @@
+@@ -1091,13 +1115,18 @@
              ${build_api_platform_dir}
              ${build_messages_dir})
  # Extra link library definitions
@@ -99,7 +101,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
  else ()
    target_link_libraries(rexx_exe rexx rexxapi ${CMAKE_REQUIRED_LIBRARIES})
  endif ()
-@@ -1130,9 +1157,14 @@
+@@ -1130,9 +1159,14 @@
              ${build_api_dir}
              ${build_api_platform_dir})
  # Extra link library definitions
@@ -115,7 +117,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
  else ()
    target_link_libraries(rexximage rexx rexxapi ${CMAKE_REQUIRED_LIBRARIES})
  endif ()
-@@ -1194,7 +1226,7 @@
+@@ -1194,7 +1228,7 @@
  endif ()
  
  # Build the rexx.img file
@@ -124,7 +126,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
    add_custom_command(OUTPUT ${ORX_IMAGE_OUTPUT_LOCATION}/rexx.img
               COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:rexximage> ${ORX_IMAGE_OUTPUT_LOCATION}/rexx.img
               DEPENDS rexximage ${image_class_files} ${platform_rexx_img_depends}
-@@ -1435,7 +1467,7 @@
+@@ -1435,7 +1469,7 @@
  
  #################### librxsock.so ################
  # WASM embeds RxSock into librexx; native platforms keep the shared package.
@@ -133,7 +135,7 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
  # additional source files required by specific platforms
  if (WIN32)
     set (platform_rxsock_sources ${build_platform_dir}/verinfo.rc)
-@@ -1518,7 +1550,7 @@
+@@ -1518,7 +1552,7 @@
  endif ()
  
  #################### liborxncurses.so ################
@@ -142,9 +144,9 @@ diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
     # need to copy this to the binary dir
     copy_build_file(ncurses.cls ${build_extensions_orxncurses_dir})
     # Sources for liborxncurses.so
-diff -ruN oorexx/common/platform/unix/SysLibrary.cpp /home/claude/ext/jvm/src/oorexx/common/platform/unix/SysLibrary.cpp
---- oorexx/common/platform/unix/SysLibrary.cpp	2026-11-01 14:19:07.379488226 +0100
-+++ /home/claude/ext/jvm/src/oorexx/common/platform/unix/SysLibrary.cpp	2026-11-01 13:54:03.835139656 +0100
+diff -ruN oorexx.ref/common/platform/unix/SysLibrary.cpp oorexx/common/platform/unix/SysLibrary.cpp
+--- oorexx.ref/common/platform/unix/SysLibrary.cpp	2026-11-01 15:45:18.019191319 +0100
++++ oorexx/common/platform/unix/SysLibrary.cpp	2026-11-01 15:09:48.095968790 +0100
 @@ -53,7 +53,7 @@
  #include <dlfcn.h>
  
@@ -181,9 +183,9 @@ diff -ruN oorexx/common/platform/unix/SysLibrary.cpp /home/claude/ext/jvm/src/oo
      if (isStaticLibrary(libraryHandle))
      {
          return true;           // linked in: nothing to unload
-diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.cpp
---- oorexx/interpreter/package/PackageManager.cpp	2026-11-01 14:19:07.380384430 +0100
-+++ /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.cpp	2026-11-01 13:54:14.959359276 +0100
+diff -ruN oorexx.ref/interpreter/package/PackageManager.cpp oorexx/interpreter/package/PackageManager.cpp
+--- oorexx.ref/interpreter/package/PackageManager.cpp	2026-11-01 15:45:18.020221017 +0100
++++ oorexx/interpreter/package/PackageManager.cpp	2026-11-01 15:45:25.194905119 +0100
 @@ -73,7 +73,7 @@
  StringTable *PackageManager::registeredRoutines = OREF_NULL;
  StringTable *PackageManager::loadedRequires = OREF_NULL;
@@ -193,22 +195,23 @@ diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src
  extern RexxPackageEntry rxsock_package_entry;
  extern RexxPackageEntry rxregexp_package_entry;
  extern RexxPackageEntry rxmath_package_entry;
-@@ -86,6 +86,14 @@
+@@ -86,6 +86,15 @@
  // a shared library.
  const PackageManager::EmbeddedPackage PackageManager::embeddedPackages[] =
  {
 +#if defined(__wasi__)
 +    // WASI preview 1 has no sockets and no Unix system calls beyond files:
-+    // only the packages that need nothing from the system are linked in.
++    // only the packages that need nothing more from the system are linked in.
 +    { "rxregexp", &rxregexp_package_entry, true },
 +    { "rxmath",   &rxmath_package_entry,   true },
++    { "hostemu",  &hostemu_package_entry,  false },
 +    { NULL, NULL, false }
 +};
 +#else
      { "rxsock",   &rxsock_package_entry,   true },
      { "rxregexp", &rxregexp_package_entry, true },
      { "rxmath",   &rxmath_package_entry,   true },
-@@ -93,6 +101,7 @@
+@@ -93,6 +102,7 @@
      { "rxunixsys", &orxnixclib_package_entry, false },
      { NULL, NULL, false }
  };
@@ -216,7 +219,7 @@ diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src
  
  
  /**
-@@ -128,7 +137,7 @@
+@@ -128,7 +138,7 @@
      loadInternalPackage(GlobalNames::REXX, rexxPackage);
      // REXXUTIL is also an internally contained package
      loadInternalPackage(GlobalNames::REXXUTIL, rexxutilPackage);
@@ -225,7 +228,7 @@ diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src
      for (const EmbeddedPackage *e = embeddedPackages; e->name != NULL; e++)
      {
          if (e->inImage)
-@@ -206,7 +215,7 @@
+@@ -206,7 +216,7 @@
              }
              else
              {
@@ -234,7 +237,7 @@ diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src
                  RexxPackageEntry *embedded = findEmbeddedPackage(package);
                  package->reload(embedded != NULL ? embedded : rexxutilPackage);
  #else
-@@ -287,7 +296,7 @@
+@@ -287,7 +297,7 @@
      // have we already loaded this package?
      // may need to bootstrap it up first.
      LibraryPackage *package = (LibraryPackage *)packages->get(name);
@@ -243,9 +246,9 @@ diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src
      // an embedded package that is loaded on first request?
      if (package == NULL)
      {
-diff -ruN oorexx/interpreter/package/PackageManager.hpp /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.hpp
---- oorexx/interpreter/package/PackageManager.hpp	2026-11-01 14:19:07.380533008 +0100
-+++ /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.hpp	2026-11-01 13:54:03.843043130 +0100
+diff -ruN oorexx.ref/interpreter/package/PackageManager.hpp oorexx/interpreter/package/PackageManager.hpp
+--- oorexx.ref/interpreter/package/PackageManager.hpp	2026-11-01 15:45:18.020341336 +0100
++++ oorexx/interpreter/package/PackageManager.hpp	2026-11-01 15:09:48.096910384 +0100
 @@ -123,7 +123,7 @@
  
      static RexxPackageEntry *rexxPackage;       // internal generated REXX package
@@ -255,9 +258,9 @@ diff -ruN oorexx/interpreter/package/PackageManager.hpp /home/claude/ext/jvm/src
      // native extension packages statically linked into the WASM interpreter
      // inImage: registered when the image is built (functions usable without
      // RxFuncAdd); otherwise loaded on first request, which runs its loader
-diff -ruN oorexx/interpreter/platform/unix/SysRexxUtil.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SysRexxUtil.cpp
---- oorexx/interpreter/platform/unix/SysRexxUtil.cpp	2025-05-31 18:43:12.649743000 +0200
-+++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SysRexxUtil.cpp	2026-11-01 14:04:30.641344156 +0100
+diff -ruN oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp oorexx/interpreter/platform/unix/SysRexxUtil.cpp
+--- oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp	2025-05-31 18:43:12.649743000 +0200
++++ oorexx/interpreter/platform/unix/SysRexxUtil.cpp	2026-11-01 15:09:48.097229014 +0100
 @@ -213,11 +213,19 @@
  /* echo == false => no echo                                                   */
  /* echo == true  => echo                                                      */
@@ -309,9 +312,9 @@ diff -ruN oorexx/interpreter/platform/unix/SysRexxUtil.cpp /home/claude/ext/jvm/
          return context->NewStringFromAsciiz(buffer);
      }
  
-diff -ruN oorexx/interpreter/platform/unix/SystemCommands.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemCommands.cpp
---- oorexx/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 14:19:07.381225509 +0100
-+++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 13:54:03.846142360 +0100
+diff -ruN oorexx.ref/interpreter/platform/unix/SystemCommands.cpp oorexx/interpreter/platform/unix/SystemCommands.cpp
+--- oorexx.ref/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 15:45:18.021037496 +0100
++++ oorexx/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 15:09:48.097541537 +0100
 @@ -826,7 +826,7 @@
      CSTRING environment = context->CString(address);
      CSTRING commandString = context->CString(command);
@@ -321,9 +324,9 @@ diff -ruN oorexx/interpreter/platform/unix/SystemCommands.cpp /home/claude/ext/j
      // There is no child-process model in the browser WASM profile.  Keep
      // commands handled entirely in-process (cd/set/unset/export), and fail
      // closed for commands that would require posix_spawnp().
-diff -ruN oorexx/interpreter/platform/unix/SystemInterpreter.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemInterpreter.cpp
---- oorexx/interpreter/platform/unix/SystemInterpreter.cpp	2026-08-02 21:36:28.519513000 +0200
-+++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemInterpreter.cpp	2026-11-01 14:01:48.007609870 +0100
+diff -ruN oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp oorexx/interpreter/platform/unix/SystemInterpreter.cpp
+--- oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp	2026-08-02 21:36:28.519513000 +0200
++++ oorexx/interpreter/platform/unix/SystemInterpreter.cpp	2026-11-01 15:09:48.097953273 +0100
 @@ -117,6 +117,12 @@
  
  void SystemInterpreter::startInterpreter()
@@ -345,9 +348,9 @@ diff -ruN oorexx/interpreter/platform/unix/SystemInterpreter.cpp /home/claude/ex
  }
  
  
-diff -ruN oorexx/rexxapi/client/LocalMacroSpaceManager.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/client/LocalMacroSpaceManager.cpp
---- oorexx/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 14:19:07.381490162 +0100
-+++ /home/claude/ext/jvm/src/oorexx/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 13:54:03.849424993 +0100
+diff -ruN oorexx.ref/rexxapi/client/LocalMacroSpaceManager.cpp oorexx/rexxapi/client/LocalMacroSpaceManager.cpp
+--- oorexx.ref/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 15:45:18.021292427 +0100
++++ oorexx/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 15:09:48.098153259 +0100
 @@ -608,7 +608,7 @@
      // once we exit the block.
      {
@@ -357,9 +360,9 @@ diff -ruN oorexx/rexxapi/client/LocalMacroSpaceManager.cpp /home/claude/ext/jvm/
          // no dlopen() in a WASM process; the interpreter is linked in
          compiler = RexxTranslateInstoreProgram;
  #else
-diff -ruN oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
---- oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 14:19:07.381615263 +0100
-+++ /home/claude/ext/jvm/src/oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 13:54:03.852755599 +0100
+diff -ruN oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.cpp oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
+--- oorexx.ref/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 15:45:18.021395052 +0100
++++ oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 15:09:48.098609710 +0100
 @@ -49,7 +49,7 @@
  #include <signal.h>
  #include <sys/types.h>
@@ -387,9 +390,9 @@ diff -ruN oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp /home/claud
      // no rxapi daemon in a WASM process: talk to the server linked in-process
      return new SysLoopbackConnection();
  #endif
-diff -ruN oorexx/rexxapi/server/APIServer.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.cpp
---- oorexx/rexxapi/server/APIServer.cpp	2026-11-01 14:19:07.381831100 +0100
-+++ /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.cpp	2026-11-01 13:54:03.855552556 +0100
+diff -ruN oorexx.ref/rexxapi/server/APIServer.cpp oorexx/rexxapi/server/APIServer.cpp
+--- oorexx.ref/rexxapi/server/APIServer.cpp	2026-11-01 15:45:18.021657491 +0100
++++ oorexx/rexxapi/server/APIServer.cpp	2026-11-01 15:09:48.099075880 +0100
 @@ -214,7 +214,7 @@
  }
  
@@ -399,9 +402,9 @@ diff -ruN oorexx/rexxapi/server/APIServer.cpp /home/claude/ext/jvm/src/oorexx/re
  /**
   * Process a single message for an in-process client (WebAssembly build, see
   * SysLoopbackConnection): the same dispatching as processMessages(), without
-diff -ruN oorexx/rexxapi/server/APIServer.hpp /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.hpp
---- oorexx/rexxapi/server/APIServer.hpp	2026-11-01 14:19:07.381877105 +0100
-+++ /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.hpp	2026-11-01 13:54:03.858612335 +0100
+diff -ruN oorexx.ref/rexxapi/server/APIServer.hpp oorexx/rexxapi/server/APIServer.hpp
+--- oorexx.ref/rexxapi/server/APIServer.hpp	2026-11-01 15:45:18.021780371 +0100
++++ oorexx/rexxapi/server/APIServer.hpp	2026-11-01 15:09:48.099605987 +0100
 @@ -70,7 +70,7 @@
      void dispatch(ServiceMessage &message);
      void sessionTerminated(APIServerThread *thread);

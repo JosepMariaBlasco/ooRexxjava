@@ -24,7 +24,7 @@ fi
 # the Java launcher (Chicory 1.7.5)
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests)
 JAR=$HERE/host/target/rexxjvm-0.1.jar
-printf '#!/bin/sh\nexec java -Xss16m -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm
+printf '#!/bin/sh\nexec java -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm
 C=$HERE/compat
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -c "$C/orx_wasi_stubs.c" -o stubs.o
 EMU="-D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_MMAN"
@@ -37,12 +37,16 @@ cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_
   -DCMAKE_CROSSCOMPILING_EMULATOR="$WORK/runwasm"
 cmake --build build --target rexx_exe rexx_img -j"$(nproc)"
 mkdir -p dist && cp build/bin/rexx dist/rexx.wasm && cp build/bin/rexx.img dist/
-# the Rexx side of the embedded native packages (::requires "rxregexp.cls")
-cp oorexx/extensions/rxregexp/rxregexp.cls dist/
+# the Rexx side of the embedded native packages (::requires "rxregexp.cls"),
+# and the extensions written in Rexx alone
+for f in rxregexp/rxregexp.cls json/json.cls yaml/yaml.cls logicalwrapper/logicalwrapper.cls \
+         dateparser/dateparser.cls csvStream/csvStream.cls; do
+  cp "oorexx/extensions/$f" dist/
+done
 # rexxj.jar: the launcher with rexx.wasm translated to JVM bytecode at build time
 # (Chicory's build-time compiler), so that start-up does not translate it again
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
 cp "$HERE/host/target/rexxj.jar" dist/
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m -jar "$D/rexxj.jar" "$@"\n' > dist/rexxj
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -jar "$D/rexxj.jar" "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
 echo "done: $WORK/dist/rexxj program.rex"

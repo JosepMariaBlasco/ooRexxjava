@@ -29,8 +29,26 @@ public final class RunWasm {
     static ImportValues imports;
     static Function<Instance, Machine> machine;   // null: interpreter
     static final AtomicInteger nextTid = new AtomicInteger(1);
+    /**
+     * Java stack for every thread that runs wasm code. Chicory's frames live on it, so
+     * deep Rexx recursion needs far more than Java's default (the suite's CALL group
+     * overflows 64 MB and passes with 256 MB). Reserved, not committed: unused stack
+     * costs no memory. {@code -Drexxjvm.stack=<bytes>} overrides it.
+     */
+    static final long STACK = Long.getLong("rexxjvm.stack", 256L << 20);
 
     public static void main(String[] args) throws Exception {
+        Throwable[] failure = new Throwable[1];
+        Thread t = new Thread(null, () -> {
+            try { run(args); } catch (Throwable x) { failure[0] = x; }
+        }, "wasm-main", STACK);
+        t.start();
+        t.join();
+        if (failure[0] instanceof Exception) throw (Exception) failure[0];
+        if (failure[0] != null) throw (Error) failure[0];
+    }
+
+    static void run(String[] args) throws Exception {
         boolean interp = Boolean.getBoolean("rexxjvm.interp");
         CompiledModule embedded = interp ? null : embeddedModule();
         List<String> argv = new ArrayList<>(Arrays.asList(args));
@@ -57,7 +75,7 @@ public final class RunWasm {
             List.of(ValType.I32), List.of(ValType.I32), (inst, a) -> {
                 int tid = nextTid.getAndIncrement();
                 int startArg = (int) a[0];
-                Thread t = new Thread(() -> {
+                Thread t = new Thread(null, () -> {
                     try {
                         Instance ti = newInstance();
                         ti.export("wasi_thread_start").apply(tid, startArg);
@@ -68,7 +86,7 @@ public final class RunWasm {
                         x.printStackTrace();
                         System.exit(70);
                     }
-                }, "wasm-" + tid);
+                }, "wasm-" + tid, STACK);
                 t.setDaemon(true);
                 t.start();
                 return new long[] { tid };
