@@ -46,15 +46,34 @@ Rexx program.
 | `rexx.img` | The interpreter's image. |
 | `rxregexp.cls` | The Rexx side of `rxregexp` (the native side, like `rxmath` and `hostemu`, is embedded in the interpreter). |
 | `json.cls`, `yaml.cls`, `logicalwrapper.cls`, `dateparser.cls`, `csvStream.cls` | The extensions written in Rexx alone. |
+| `samples/` | ooRexx's samples (the test suite looks for them at `.RexxInfo~executable/../samples`). |
 
 Running `build.sh` again over the same work directory reuses the
 downloads and the patched sources.
+
+### The saved build
+
+The branch `saved-build` holds the last build (binaries, not sources: one
+orphan commit, replaced each time), so that a fresh checkout need not
+compile:
+
+```bash
+scripts/saved-build.sh fetch [work-directory]   # default: /home/claude/work
+```
+
+restores `dist/` and the build tree when its `MANIFEST` (the hashes of
+`build.sh`, the patch, the toolchain file, `compat/` and `host/`) matches
+the checkout, and fails otherwise; `build.sh` over the same directory is
+then incremental. The build tree holds absolute paths: it is only reusable
+at the directory it was built in. After a build, `scripts/saved-build.sh
+save` and `publish` replace it.
 
 ## Contents
 
 | Path | What |
 |---|---|
 | `build.sh` | Rebuilds everything from scratch. |
+| `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
