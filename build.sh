@@ -7,8 +7,9 @@ WORK=${1:-$HOME/oorexx-jvm}
 mkdir -p "$WORK" && cd "$WORK"
 [ -d wasi-sdk-34.0-x86_64-linux ] || { curl -sSLf -o wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz; tar xzf wasi-sdk.tar.gz; }
 W=$WORK/wasi-sdk-34.0-x86_64-linux
-# oorexxwasm's base patch, from a fixed commit (its HEAD moves with the family's revision)
-OOREXXWASM_REV=7b50e79459865e8700c08b207abf3e08e0a93d26
+# oorexxwasm's generic WebAssembly layer (its 0001, the only patch a WASI build applies),
+# from a fixed commit (its HEAD moves with the family's revision)
+OOREXXWASM_REV=62f59308e98f105116b7935e6678a245d86e8eb0
 if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; then
   rm -rf oorexxwasm && git init -q oorexxwasm
   git -C oorexxwasm fetch -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$OOREXXWASM_REV"
@@ -16,8 +17,8 @@ if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; t
 fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
-  svn export -q -r 13289 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
-  (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-build-and-base-runtime.patch \
+  svn export -q -r 13346 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
+  (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-generic-layer.patch \
                  && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
   mv oorexx.tmp oorexx
 fi
@@ -31,9 +32,8 @@ EMU="-D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_PROCESS_CL
 CF="-isystem $C -include $C/orx_wasi_compat.h -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false $EMU"
 LF="$WORK/stubs.o -fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
 sed "s|^\tset(WASI_SDK_PREFIX .*|\tset(WASI_SDK_PREFIX $W)|" "$HERE/wasi-p1-threads.cmake" > toolchain.cmake
-# ORX_ENABLE_IPO=OFF: with LTO the final code generation loses -fwasm-exceptions and every catch
 cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
-  -DORX_ENABLE_IPO=OFF -DCMAKE_C_FLAGS="$CF" -DCMAKE_CXX_FLAGS="$CF" -DCMAKE_EXE_LINKER_FLAGS="$LF" \
+  -DCMAKE_C_FLAGS="$CF" -DCMAKE_CXX_FLAGS="$CF" -DCMAKE_EXE_LINKER_FLAGS="$LF" \
   -DCMAKE_CROSSCOMPILING_EMULATOR="$WORK/runwasm"
 cmake --build build --target rexx_exe rexx_img -j"$(nproc)"
 mkdir -p dist && cp build/bin/rexx dist/rexx.wasm && cp build/bin/rexx.img dist/
