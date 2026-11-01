@@ -7,14 +7,16 @@ WORK=${1:-$HOME/oorexx-jvm}
 mkdir -p "$WORK" && cd "$WORK"
 [ -d wasi-sdk-34.0-x86_64-linux ] || { curl -sSLf -o wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz; tar xzf wasi-sdk.tar.gz; }
 W=$WORK/wasi-sdk-34.0-x86_64-linux
-[ -d oorexx ] || svn export -q -r 13289 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx
 [ -d oorexxwasm ] || git clone -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm
-cd oorexx
-patch -p1 -N < ../oorexxwasm/patches/0001-wasm-build-and-base-runtime.patch || true
-patch -p1 -N < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch" || true
-cd ..
+# the patches only on a fresh export: applying them again to a patched tree breaks it
+if [ ! -d oorexx ]; then
+  svn export -q -r 13289 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
+  (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-build-and-base-runtime.patch \
+                 && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
+  mv oorexx.tmp oorexx
+fi
 # the Java launcher (Chicory 1.7.5)
-(cd "$HERE/host" && mvn -q -B package -DskipTests)
+(cd "$HERE/host" && mvn -q -B clean package -DskipTests)
 JAR=$HERE/host/target/rexxjvm-0.1.jar
 printf '#!/bin/sh\nexec java -Xss16m -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm
 C=$HERE/compat
@@ -31,6 +33,10 @@ cmake --build build --target rexx_exe rexx_img -j"$(nproc)"
 mkdir -p dist && cp build/bin/rexx dist/rexx.wasm && cp build/bin/rexx.img dist/
 # the Rexx side of the embedded native packages (::requires "rxregexp.cls")
 cp oorexx/extensions/rxregexp/rxregexp.cls dist/
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m -jar %s "$D/rexx.wasm" "$@"\n' "$JAR" > dist/rexxj
+# rexxj.jar: the launcher with rexx.wasm translated to JVM bytecode at build time
+# (Chicory's build-time compiler), so that start-up does not translate it again
+(cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
+cp "$HERE/host/target/rexxj.jar" dist/
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m -jar "$D/rexxj.jar" "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
 echo "done: $WORK/dist/rexxj program.rex"

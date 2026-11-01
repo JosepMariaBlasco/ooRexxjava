@@ -1,6 +1,7 @@
 package rexxjvm;
 
 import com.dylibso.chicory.compiler.MachineFactoryCompiler;
+import com.dylibso.chicory.runtime.CompiledModule;
 import com.dylibso.chicory.runtime.*;
 import com.dylibso.chicory.wasi.WasiExitException;
 import com.dylibso.chicory.wasi.WasiOptions;
@@ -15,7 +16,14 @@ import java.util.*;
 import java.util.concurrent.atomic.AtomicInteger;
 import java.util.function.Function;
 
-/** Runs a wasm32-wasip1-threads command module on Chicory, with wasi-threads (thread-spawn). */
+/**
+ * Runs a wasm32-wasip1-threads command module on Chicory, with wasi-threads (thread-spawn).
+ *
+ * <p>{@code RunWasm module.wasm args...} parses the module and translates it to JVM
+ * bytecode at start-up. A jar built with the {@code embedded} Maven profile carries
+ * {@code rexx.wasm} already translated ({@code rexxjvm.RexxModule}); there,
+ * {@code RunWasm args...} runs it, and every argument goes to the module.
+ */
 public final class RunWasm {
     static WasmModule module;
     static ImportValues imports;
@@ -24,9 +32,16 @@ public final class RunWasm {
 
     public static void main(String[] args) throws Exception {
         boolean interp = Boolean.getBoolean("rexxjvm.interp");
-        module = Parser.parse(new File(args[0]));
+        CompiledModule embedded = interp ? null : embeddedModule();
         List<String> argv = new ArrayList<>(Arrays.asList(args));
-        argv.set(0, new File(args[0]).getName());
+        if (embedded != null && !(args.length > 0 && args[0].endsWith(".wasm"))) {
+            module = embedded.wasmModule();
+            argv.add(0, "rexx");
+        } else {
+            embedded = null;
+            module = Parser.parse(new File(args[0]));
+            argv.set(0, new File(args[0]).getName());
+        }
         WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv)
             .withDirectory("/", Path.of("/"));
         for (Map.Entry<String, String> e : System.getenv().entrySet()) if (!e.getKey().equals("PWD")) ob.withEnvironment(e.getKey(), e.getValue());
@@ -64,7 +79,9 @@ public final class RunWasm {
             .addFunction(spawn)
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
-        machine = interp ? null : MachineFactoryCompiler.compile(module);
+        machine = interp ? null
+                : embedded != null ? embedded.machineFactory()
+                : MachineFactoryCompiler.compile(module);
 
         int rc = 0;
         try {
@@ -75,6 +92,17 @@ public final class RunWasm {
         }
         System.out.flush();
         System.exit(rc);
+    }
+
+    /** The module translated at build time, if this jar carries one. */
+    static CompiledModule embeddedModule() {
+        try {
+            return (CompiledModule) Class.forName("rexxjvm.RexxModule").getDeclaredConstructor().newInstance();
+        } catch (ClassNotFoundException x) {
+            return null;
+        } catch (ReflectiveOperationException x) {
+            throw new IllegalStateException(x);
+        }
     }
 
     static Instance newInstance() {

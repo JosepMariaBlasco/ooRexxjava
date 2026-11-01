@@ -25,8 +25,19 @@ Java from Rexx, HALT (Ctrl-C). The full report is in
 Needs `svn`, `cmake`, `make`, Java 11 or later and Maven, and network
 access (wasi-sdk 34, ooRexx trunk r13289 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s base
-patch, Maven Central). The result is `dist/rexxj`, which runs a Rexx
-program: `dist/rexxj program.rex`.
+patch, Maven Central). The result is `dist/`, self-contained:
+`dist/rexxj program.rex` runs a Rexx program.
+
+| In `dist/` | What |
+|---|---|
+| `rexxj` | The launcher script. |
+| `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Chicory's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
+| `rexx.wasm` | The interpreter as WebAssembly. Not needed by `rexxj`; `java -jar rexxj.jar rexx.wasm program.rex` translates it at start-up instead. |
+| `rexx.img` | The interpreter's image. |
+| `rxregexp.cls` | The Rexx side of `rxregexp`, embedded in the interpreter. |
+
+Running `build.sh` again over the same work directory reuses the
+downloads and the patched sources.
 
 ## Contents
 
@@ -36,7 +47,7 @@ program: `dist/rexxj program.rex`.
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch, applied on top of `oorexxwasm`'s `patches/0001-wasm-build-and-base-runtime.patch`. |
 | `compat/` | Headers and stubs for what wasi-libc lacks. |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
-| `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`). |
+| `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `t.cpp`). |
 | `docs/` | Reports. |
 
