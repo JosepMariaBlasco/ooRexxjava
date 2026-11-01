@@ -23,6 +23,42 @@ pid_t fork(void);
 #ifdef __cplusplus
 }
 #endif
+
+/* File system calls done by the launcher instead of WASI (orx_wasi_fs.c says
+   why). The system headers come first, so that their declarations keep their
+   names and only the calls after this point are redirected; their include
+   guards keep later inclusions from declaring them again. */
+#include <stdio.h>
+#include <unistd.h>
+#include <utime.h>
+#include <sys/stat.h>
+#include <sys/time.h>
+#ifdef __cplusplus
+extern "C" {
+#endif
+int orx_wasi_stat(const char *__restrict, struct stat *__restrict);
+int orx_wasi_lstat(const char *__restrict, struct stat *__restrict);
+int orx_wasi_fstat(int, struct stat *);
+int orx_wasi_access(const char *, int);
+int orx_wasi_chmod(const char *, mode_t);
+int orx_wasi_rename(const char *, const char *);
+int orx_wasi_utimes(const char *, const struct timeval [2]);
+int orx_wasi_utime(const char *, const struct utimbuf *);
+int orx_wasi_chdir(const char *);
+#ifdef __cplusplus
+}
+#endif
+/* function-like: "struct stat" is left alone; stat64, lstat64 and fstat64 are
+   this libc's macros for stat, lstat and fstat (_GNU_SOURCE), so they are redirected too */
+#define stat(p, b)    orx_wasi_stat(p, b)
+#define lstat(p, b)   orx_wasi_lstat(p, b)
+#define fstat(f, b)   orx_wasi_fstat(f, b)
+#define access(p, m)  orx_wasi_access(p, m)
+#define chmod(p, m)   orx_wasi_chmod(p, m)
+#define rename(f, t)  orx_wasi_rename(f, t)
+#define utimes(p, t)  orx_wasi_utimes(p, t)
+#define utime(p, t)   orx_wasi_utime(p, t)
+#define chdir(p)      orx_wasi_chdir(p)
 #ifdef __cplusplus
 /* libc++ declares std::abs(long) and std::exception_ptr only in these */
 #include <cstdlib>

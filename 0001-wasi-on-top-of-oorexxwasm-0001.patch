@@ -17,6 +17,26 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
  endif ()
  # Library definition
  if (ORX_WASM)
+diff -ruN oorexx.ref/common/platform/unix/SysFile.cpp oorexx/common/platform/unix/SysFile.cpp
+--- oorexx.ref/common/platform/unix/SysFile.cpp
++++ oorexx/common/platform/unix/SysFile.cpp
+@@ -128,6 +128,16 @@
+ {
+     flags = openFlags;           // save the initial flag values
+ 
++#ifdef __wasi__
++    // Chicory's WASI (Java's file channels) cannot read and append through
++    // the same descriptor: with O_APPEND it opens for writing only, and
++    // reading fails with EBADF.  write() already seeks to the end before
++    // writing when flags has O_APPEND, so open without it if we also read.
++    if ((openFlags & O_APPEND) != 0 && (openFlags & O_ACCMODE) != O_WRONLY)
++    {
++        openFlags &= ~O_APPEND;
++    }
++#endif
+     // we must open this with the NOINHERIT flag added
+     fileHandle = ::open64(name, openFlags, (mode_t)openMode);
+     if ( fileHandle == -1 )
 diff -ruN oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp oorexx/interpreter/platform/unix/SysRexxUtil.cpp
 --- oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp
 +++ oorexx/interpreter/platform/unix/SysRexxUtil.cpp
@@ -95,6 +115,20 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp oorexx/inte
  }
  
  
+diff -ruN oorexx.ref/interpreter/streamLibrary/StreamNative.cpp oorexx/interpreter/streamLibrary/StreamNative.cpp
+--- oorexx.ref/interpreter/streamLibrary/StreamNative.cpp
++++ oorexx/interpreter/streamLibrary/StreamNative.cpp
+@@ -2444,7 +2444,9 @@
+     }
+     /* if write only specified           */
+     /*      - try both first             */
+-    if (oflag & RX_O_WRONLY)
++    // the access modes are values, not bits: under WASI, O_RDWR is
++    // O_RDONLY | O_WRONLY, and "oflag & RX_O_WRONLY" was true for BOTH
++    if ((oflag & (RX_O_RDONLY | RX_O_WRONLY | RX_O_RDWR)) == RX_O_WRONLY)
+     {
+         /* set both flags                    */
+         read_write = true;
 diff -ruN oorexx.ref/rexxapi/client/LocalAPIManager.cpp oorexx/rexxapi/client/LocalAPIManager.cpp
 --- oorexx.ref/rexxapi/client/LocalAPIManager.cpp
 +++ oorexx/rexxapi/client/LocalAPIManager.cpp
