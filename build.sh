@@ -7,7 +7,13 @@ WORK=${1:-$HOME/oorexx-jvm}
 mkdir -p "$WORK" && cd "$WORK"
 [ -d wasi-sdk-34.0-x86_64-linux ] || { curl -sSLf -o wasi-sdk.tar.gz https://github.com/WebAssembly/wasi-sdk/releases/download/wasi-sdk-34/wasi-sdk-34.0-x86_64-linux.tar.gz; tar xzf wasi-sdk.tar.gz; }
 W=$WORK/wasi-sdk-34.0-x86_64-linux
-[ -d oorexxwasm ] || git clone -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm
+# oorexxwasm's base patch, from a fixed commit (its HEAD moves with the family's revision)
+OOREXXWASM_REV=7b50e79459865e8700c08b207abf3e08e0a93d26
+if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; then
+  rm -rf oorexxwasm && git init -q oorexxwasm
+  git -C oorexxwasm fetch -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$OOREXXWASM_REV"
+  git -C oorexxwasm checkout -q FETCH_HEAD
+fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
   svn export -q -r 13289 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp

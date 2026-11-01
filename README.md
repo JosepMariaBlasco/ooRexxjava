@@ -25,7 +25,7 @@ Java from Rexx, HALT (Ctrl-C). The full report is in
 Needs `svn`, `cmake`, `make`, Java 11 or later and Maven, and network
 access (wasi-sdk 34, ooRexx trunk r13289 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s base
-patch, Maven Central). The result is `dist/`, self-contained:
+patch from the commit `OOREXXWASM_REV` in `build.sh`, Maven Central). The result is `dist/`, self-contained:
 `dist/rexxj program.rex` runs a Rexx program.
 
 | In `dist/` | What |
