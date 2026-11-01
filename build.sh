@@ -45,6 +45,8 @@ for f in rxregexp/rxregexp.cls json/json.cls yaml/yaml.cls logicalwrapper/logica
          dateparser/dateparser.cls csvStream/csvStream.cls; do
   cp "oorexx/extensions/$f" dist/
 done
+# the samples, where the test suite looks for them (.RexxInfo~executable/../samples)
+mkdir -p dist/samples && find oorexx/samples -maxdepth 1 -type f ! -name CMakeLists.txt -exec cp {} dist/samples/ \;
 # rexxj.jar: the launcher with rexx.wasm translated to JVM bytecode at build time
 # (Chicory's build-time compiler), so that start-up does not translate it again
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
