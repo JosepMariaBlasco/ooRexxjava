@@ -1,0 +1,413 @@
+diff -ruN oorexx/CMakeLists.txt /home/claude/ext/jvm/src/oorexx/CMakeLists.txt
+--- oorexx/CMakeLists.txt	2026-11-01 14:19:07.378474873 +0100
++++ /home/claude/ext/jvm/src/oorexx/CMakeLists.txt	2026-11-01 13:56:10.944232588 +0100
+@@ -177,13 +177,21 @@
+ set (ORX_VERSION ${ORX_CURRENT}.${ORX_AGE}.${ORX_REVISION})
+ 
+ 
++# WebAssembly builds: Emscripten (browser, Node) and WASI (any WASI runtime)
++if (EMSCRIPTEN OR CMAKE_SYSTEM_NAME STREQUAL "WASI")
++   set (ORX_WASM TRUE)
++   add_compile_definitions(ORX_WASM)
++endif ()
++if (CMAKE_SYSTEM_NAME STREQUAL "WASI")
++   set (ORX_WASI TRUE)
++endif ()
+ # Set the platform subdirectory name
+ if (WIN32)
+    set (ORX_PLATFORM_DIR platform/windows)
+    set (ORX_IMAGE_OUTPUT_LOCATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+ else ()
+    set (ORX_PLATFORM_DIR platform/unix)
+-   if (EMSCRIPTEN)
++   if (ORX_WASM)
+       # The WASM runtime embeds the image from the executable output directory.
+       set (ORX_IMAGE_OUTPUT_LOCATION ${CMAKE_RUNTIME_OUTPUT_DIRECTORY})
+    else ()
+@@ -440,7 +448,7 @@
+   check_include_file(sys/signal.h HAVE_SYS_SIGNAL_H)
+   check_include_file(sys/xattr.h  HAVE_SYS_XATTR_H)
+   check_include_file(wordexp.h    HAVE_WORDEXP_H)
+-  if (NOT EMSCRIPTEN)
++  if (NOT ORX_WASM)
+     set (CURSES_NEED_NCURSES TRUE)
+     include(FindCurses) # sets CURSES_HAVE_NCURSES_H and CURSES_HAVE_NCURSES_NCURSES_H
+     message(STATUS "CURSES_HAVE_NCURSES_H is ${CURSES_HAVE_NCURSES_H}")
+@@ -678,11 +686,16 @@
+             ${build_platform_dir}/verinfo.rc)
+    set (platform_rexxapi_libs wsock32)
+ else ()
++   if (ORX_WASI)
++      # no sockets: the API server is reached in-process (SysLoopbackConnection)
++      set (platform_rexxapi_sources)
++   else ()
+    set (platform_rexxapi_sources
+             ${build_rexxapi_common_platform_dir}/SysCSStream.cpp)
++   endif ()
+ endif ()
+ # Library definition
+-if (EMSCRIPTEN)
++if (ORX_WASM)
+   # No rxapi daemon in a WASM process: the API server (queues, registrations,
+   # macrospace) is linked in and reached through SysLoopbackConnection.
+   add_library(rexxapi STATIC
+@@ -975,10 +988,18 @@
+ endif ()
+ 
+ # Library definition
+-if (EMSCRIPTEN)
++if (ORX_WASM)
+   # Browser/Node WASM builds statically embed the native extension packages
+   # (see PackageManager::embeddedPackages).  Emscripten's pthread +
+   # side-module combination is intentionally avoided here.
++  if (ORX_WASI)
++  # WASI preview 1: no sockets, no Unix system calls beyond files
++  set (wasm_embedded_package_sources
++              ${build_extensions_rxregexp_dir}/automaton.cpp
++              ${build_extensions_rxregexp_dir}/dblqueue.cpp
++              ${build_extensions_rxregexp_dir}/rxregexp.cpp
++              ${build_extensions_rxmath_dir}/rxmath.cpp)
++  else ()
+   set (wasm_embedded_package_sources
+               ${build_extensions_rxsock_dir}/rxsock.cpp
+               ${build_extensions_rxsock_dir}/rxsockfn.cpp
+@@ -989,6 +1010,7 @@
+               ${build_extensions_hostemu_platform_dir}/hostemu.cpp
+               ${build_extensions_hostemu_dir}/cmdparse.cpp
+               ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
++  endif ()
+   set_source_files_properties(${wasm_embedded_package_sources}
+               PROPERTIES COMPILE_DEFINITIONS ORX_EMBEDDED_PACKAGE)
+   add_library(rexx STATIC
+@@ -1091,13 +1113,18 @@
+             ${build_api_platform_dir}
+             ${build_messages_dir})
+ # Extra link library definitions
+-if (EMSCRIPTEN)
++if (ORX_WASM)
+   # librexx is a static archive in the WASM build.  Nothing references
+   # SystemInitialization.cpp, so without --whole-archive the linker drops it
+   # together with the _rexx_init() constructor that creates the kernel and
+   # resource locks; every SysMutex then stays uncreated, request() returns
+   # false without locking, and the interpreter runs threads unsynchronized.
++  if (ORX_WASI)
++    # CMake has no WHOLE_ARCHIVE feature for the WASI platform
++    target_link_libraries(rexx_exe -Wl,--whole-archive rexx -Wl,--no-whole-archive rexxapi ${CMAKE_REQUIRED_LIBRARIES})
++  else ()
+   target_link_libraries(rexx_exe "$<LINK_LIBRARY:WHOLE_ARCHIVE,rexx>" rexxapi ${CMAKE_REQUIRED_LIBRARIES})
++  endif ()
+ else ()
+   target_link_libraries(rexx_exe rexx rexxapi ${CMAKE_REQUIRED_LIBRARIES})
+ endif ()
+@@ -1130,9 +1157,14 @@
+             ${build_api_dir}
+             ${build_api_platform_dir})
+ # Extra link library definitions
+-if (EMSCRIPTEN)
++if (ORX_WASM)
+   # see rexx_exe: keep the _rexx_init() constructor
++  if (ORX_WASI)
++    # CMake has no WHOLE_ARCHIVE feature for the WASI platform
++    target_link_libraries(rexximage -Wl,--whole-archive rexx -Wl,--no-whole-archive rexxapi ${CMAKE_REQUIRED_LIBRARIES})
++  else ()
+   target_link_libraries(rexximage "$<LINK_LIBRARY:WHOLE_ARCHIVE,rexx>" rexxapi ${CMAKE_REQUIRED_LIBRARIES})
++  endif ()
+ else ()
+   target_link_libraries(rexximage rexx rexxapi ${CMAKE_REQUIRED_LIBRARIES})
+ endif ()
+@@ -1194,7 +1226,7 @@
+ endif ()
+ 
+ # Build the rexx.img file
+-if (EMSCRIPTEN)
++if (ORX_WASM)
+   add_custom_command(OUTPUT ${ORX_IMAGE_OUTPUT_LOCATION}/rexx.img
+              COMMAND ${CMAKE_CROSSCOMPILING_EMULATOR} $<TARGET_FILE:rexximage> ${ORX_IMAGE_OUTPUT_LOCATION}/rexx.img
+              DEPENDS rexximage ${image_class_files} ${platform_rexx_img_depends}
+@@ -1435,7 +1467,7 @@
+ 
+ #################### librxsock.so ################
+ # WASM embeds RxSock into librexx; native platforms keep the shared package.
+-if (NOT EMSCRIPTEN)
++if (NOT ORX_WASM)
+ # additional source files required by specific platforms
+ if (WIN32)
+    set (platform_rxsock_sources ${build_platform_dir}/verinfo.rc)
+@@ -1518,7 +1550,7 @@
+ endif ()
+ 
+ #################### liborxncurses.so ################
+-if (NOT WIN32 AND NOT EMSCRIPTEN)
++if (NOT WIN32 AND NOT ORX_WASM)
+    # need to copy this to the binary dir
+    copy_build_file(ncurses.cls ${build_extensions_orxncurses_dir})
+    # Sources for liborxncurses.so
+diff -ruN oorexx/common/platform/unix/SysLibrary.cpp /home/claude/ext/jvm/src/oorexx/common/platform/unix/SysLibrary.cpp
+--- oorexx/common/platform/unix/SysLibrary.cpp	2026-11-01 14:19:07.379488226 +0100
++++ /home/claude/ext/jvm/src/oorexx/common/platform/unix/SysLibrary.cpp	2026-11-01 13:54:03.835139656 +0100
+@@ -53,7 +53,7 @@
+ #include <dlfcn.h>
+ 
+ 
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+ // There is no dlopen in WebAssembly.  A build may instead link libraries in
+ // and describe them with this table (a weak symbol: NULL in the builds that
+ // link none): load() finds a library by name, getProcedure() a symbol in it,
+@@ -121,7 +121,7 @@
+ /* Function:  Resolve a named procedure in a library                          */
+ /******************************************************************************/
+ {
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     if (isStaticLibrary(libraryHandle))
+     {
+         const char *library = ((const OrxWasmStaticLibrary *)libraryHandle)->name;
+@@ -159,7 +159,7 @@
+         return false;
+     }
+ 
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     const OrxWasmStaticLibrary *linkedIn = findStaticLibrary(name);
+     if (linkedIn != NULL)
+     {
+@@ -193,7 +193,7 @@
+  */
+ bool SysLibrary::unload()
+ {
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     if (isStaticLibrary(libraryHandle))
+     {
+         return true;           // linked in: nothing to unload
+diff -ruN oorexx/interpreter/package/PackageManager.cpp /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.cpp
+--- oorexx/interpreter/package/PackageManager.cpp	2026-11-01 14:19:07.380384430 +0100
++++ /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.cpp	2026-11-01 13:54:14.959359276 +0100
+@@ -73,7 +73,7 @@
+ StringTable *PackageManager::registeredRoutines = OREF_NULL;
+ StringTable *PackageManager::loadedRequires = OREF_NULL;
+ 
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+ extern RexxPackageEntry rxsock_package_entry;
+ extern RexxPackageEntry rxregexp_package_entry;
+ extern RexxPackageEntry rxmath_package_entry;
+@@ -86,6 +86,14 @@
+ // a shared library.
+ const PackageManager::EmbeddedPackage PackageManager::embeddedPackages[] =
+ {
++#if defined(__wasi__)
++    // WASI preview 1 has no sockets and no Unix system calls beyond files:
++    // only the packages that need nothing from the system are linked in.
++    { "rxregexp", &rxregexp_package_entry, true },
++    { "rxmath",   &rxmath_package_entry,   true },
++    { NULL, NULL, false }
++};
++#else
+     { "rxsock",   &rxsock_package_entry,   true },
+     { "rxregexp", &rxregexp_package_entry, true },
+     { "rxmath",   &rxmath_package_entry,   true },
+@@ -93,6 +101,7 @@
+     { "rxunixsys", &orxnixclib_package_entry, false },
+     { NULL, NULL, false }
+ };
++#endif
+ 
+ 
+ /**
+@@ -128,7 +137,7 @@
+     loadInternalPackage(GlobalNames::REXX, rexxPackage);
+     // REXXUTIL is also an internally contained package
+     loadInternalPackage(GlobalNames::REXXUTIL, rexxutilPackage);
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     for (const EmbeddedPackage *e = embeddedPackages; e->name != NULL; e++)
+     {
+         if (e->inImage)
+@@ -206,7 +215,7 @@
+             }
+             else
+             {
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+                 RexxPackageEntry *embedded = findEmbeddedPackage(package);
+                 package->reload(embedded != NULL ? embedded : rexxutilPackage);
+ #else
+@@ -287,7 +296,7 @@
+     // have we already loaded this package?
+     // may need to bootstrap it up first.
+     LibraryPackage *package = (LibraryPackage *)packages->get(name);
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     // an embedded package that is loaded on first request?
+     if (package == NULL)
+     {
+diff -ruN oorexx/interpreter/package/PackageManager.hpp /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.hpp
+--- oorexx/interpreter/package/PackageManager.hpp	2026-11-01 14:19:07.380533008 +0100
++++ /home/claude/ext/jvm/src/oorexx/interpreter/package/PackageManager.hpp	2026-11-01 13:54:03.843043130 +0100
+@@ -123,7 +123,7 @@
+ 
+     static RexxPackageEntry *rexxPackage;       // internal generated REXX package
+     static RexxPackageEntry *rexxutilPackage;   // internal generated REXXUTIL package
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     // native extension packages statically linked into the WASM interpreter
+     // inImage: registered when the image is built (functions usable without
+     // RxFuncAdd); otherwise loaded on first request, which runs its loader
+diff -ruN oorexx/interpreter/platform/unix/SysRexxUtil.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SysRexxUtil.cpp
+--- oorexx/interpreter/platform/unix/SysRexxUtil.cpp	2025-05-31 18:43:12.649743000 +0200
++++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SysRexxUtil.cpp	2026-11-01 14:04:30.641344156 +0100
+@@ -213,11 +213,19 @@
+ /* echo == false => no echo                                                   */
+ /* echo == true  => echo                                                      */
+ /******************************************************************************/
++#if defined(__wasi__)
++// WASI's struct rusage has only the CPU times
++#define ORX_RUSAGE(r, field) 0L
++#else
++#define ORX_RUSAGE(r, field) (r).field
++#endif
++
+ int getkey(char *ret, bool echo)
+ {
+     /* restore original TTY settings on exit */
+ 
+     int ttyfd = STDIN_FILENO;              /* standard tty filedescriptor        */
++#if !defined(__wasi__)
+     /* Set the cleanup handler for unconditional process termination              */
+     struct sigaction new_action;
+ 
+@@ -241,6 +249,7 @@
+     sigaction(SIGILL, &new_action, NULL);  /* exitClear on SIGILL signal          */
+     sigaction(SIGBUS, &new_action, NULL);  /* exitClear on SIGBUS signal          */
+     sigaction(SIGPIPE, &new_action, NULL); /* exitClear on broken pipe            */
++#endif
+ 
+ 
+     if (!isatty(ttyfd))                 /* connected to a terminal ?          */
+@@ -1587,19 +1596,19 @@
+     else if (!strcasecmp(selector, "PMEM"))  /* Show max memory RSS used   */
+     {
+         char buffer[100];
+-        snprintf(buffer, sizeof(buffer), "Max_Memory_RSS: %ld", struResUse.ru_maxrss);
++        snprintf(buffer, sizeof(buffer), "Max_Memory_RSS: %ld", ORX_RUSAGE(struResUse, ru_maxrss));
+         return context->NewStringFromAsciiz(buffer);
+     }
+     else if (!strcasecmp(selector, "PSWAPS")) /* Memory has been swapped   */
+     {
+         char buffer[100];
+-        snprintf(buffer, sizeof(buffer), "Memory_swaps: %ld", struResUse.ru_nswap);
++        snprintf(buffer, sizeof(buffer), "Memory_swaps: %ld", ORX_RUSAGE(struResUse, ru_nswap));
+         return context->NewStringFromAsciiz(buffer);
+     }
+     else if (!strcasecmp(selector, "PRCVDSIG")) /* Process received signals*/
+     {
+         char buffer[100];
+-        snprintf(buffer, sizeof(buffer), "Received_signals: %ld", struResUse.ru_nsignals);
++        snprintf(buffer, sizeof(buffer), "Received_signals: %ld", ORX_RUSAGE(struResUse, ru_nsignals));
+         return context->NewStringFromAsciiz(buffer);
+     }
+ 
+diff -ruN oorexx/interpreter/platform/unix/SystemCommands.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemCommands.cpp
+--- oorexx/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 14:19:07.381225509 +0100
++++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemCommands.cpp	2026-11-01 13:54:03.846142360 +0100
+@@ -826,7 +826,7 @@
+     CSTRING environment = context->CString(address);
+     CSTRING commandString = context->CString(command);
+ 
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     // There is no child-process model in the browser WASM profile.  Keep
+     // commands handled entirely in-process (cd/set/unset/export), and fail
+     // closed for commands that would require posix_spawnp().
+diff -ruN oorexx/interpreter/platform/unix/SystemInterpreter.cpp /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemInterpreter.cpp
+--- oorexx/interpreter/platform/unix/SystemInterpreter.cpp	2026-08-02 21:36:28.519513000 +0200
++++ /home/claude/ext/jvm/src/oorexx/interpreter/platform/unix/SystemInterpreter.cpp	2026-11-01 14:01:48.007609870 +0100
+@@ -117,6 +117,12 @@
+ 
+ void SystemInterpreter::startInterpreter()
+ {
++#if defined(__wasi__)
++    // WASI preview 1 has no sigaction(); its emulated signal() only delivers
++    // signals the program raises itself, so there is nothing more to set up.
++    signal(SIGINT, signalHandler);
++    signal(SIGTERM, signalHandler);
++#else
+ 
+     /* Set the cleanup handler for unconditional process termination          */
+     struct sigaction new_action;
+@@ -146,6 +152,7 @@
+     // Set SIGPIPE to ignore so that ADDRESS WITH pipes or rxsock sockets
+     // may return EPIPE error codes instead of the interpreter being killed
+     signal(SIGPIPE, SIG_IGN);
++#endif
+ }
+ 
+ 
+diff -ruN oorexx/rexxapi/client/LocalMacroSpaceManager.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/client/LocalMacroSpaceManager.cpp
+--- oorexx/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 14:19:07.381490162 +0100
++++ /home/claude/ext/jvm/src/oorexx/rexxapi/client/LocalMacroSpaceManager.cpp	2026-11-01 13:54:03.849424993 +0100
+@@ -608,7 +608,7 @@
+     // once we exit the block.
+     {
+         RexxReturnCode (RexxEntry *compiler)(const char *, CONSTRXSTRING *, RXSTRING *);
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+         // no dlopen() in a WASM process; the interpreter is linked in
+         compiler = RexxTranslateInstoreProgram;
+ #else
+diff -ruN oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp
+--- oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 14:19:07.381615263 +0100
++++ /home/claude/ext/jvm/src/oorexx/rexxapi/client/platform/unix/SysLocalAPIManager.cpp	2026-11-01 13:54:03.852755599 +0100
+@@ -49,7 +49,7 @@
+ #include <signal.h>
+ #include <sys/types.h>
+ #include "SysProcess.hpp"
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+ #include "SysLoopbackConnection.hpp"
+ #endif
+ 
+@@ -76,7 +76,7 @@
+  */
+ void SysLocalAPIManager::startServerProcess()
+ {
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     throw new ServiceException(API_FAILURE, "rxapi service is unavailable in the WASM profile");
+ #else
+ #define RXAPI "rxapi"
+@@ -195,7 +195,7 @@
+  */
+ ApiConnection *SysLocalAPIManager::newClientConnection()
+ {
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     // no rxapi daemon in a WASM process: talk to the server linked in-process
+     return new SysLoopbackConnection();
+ #endif
+diff -ruN oorexx/rexxapi/server/APIServer.cpp /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.cpp
+--- oorexx/rexxapi/server/APIServer.cpp	2026-11-01 14:19:07.381831100 +0100
++++ /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.cpp	2026-11-01 13:54:03.855552556 +0100
+@@ -214,7 +214,7 @@
+ }
+ 
+ 
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+ /**
+  * Process a single message for an in-process client (WebAssembly build, see
+  * SysLoopbackConnection): the same dispatching as processMessages(), without
+diff -ruN oorexx/rexxapi/server/APIServer.hpp /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.hpp
+--- oorexx/rexxapi/server/APIServer.hpp	2026-11-01 14:19:07.381877105 +0100
++++ /home/claude/ext/jvm/src/oorexx/rexxapi/server/APIServer.hpp	2026-11-01 13:54:03.858612335 +0100
+@@ -70,7 +70,7 @@
+     void dispatch(ServiceMessage &message);
+     void sessionTerminated(APIServerThread *thread);
+     void cleanupTerminatedSessions();
+-#if defined(__EMSCRIPTEN__)
++#if defined(ORX_WASM)
+     void processMessage(ServiceMessage &message);
+ #endif
+ 
