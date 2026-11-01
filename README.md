@@ -21,11 +21,15 @@ as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). Not available yet: sockets, Java from Rexx, HALT
 (Ctrl-C). ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
-suite's native libraries): 388 of 405 test groups pass
-(`results/suite-jvm-r13346-rxapi.csv`; four of the failures, `BEEP`,
-`RexxContext`, `TRACE`, `TRACE_TraceObject`, depend on timing and pass when
-run again). Before: 384 with the native libraries but without the shared
-API server (`suite-jvm-r13346-api.csv`), 379 with commands
+suite's native libraries) by a user other than root: 396 of 405 test groups
+pass (`results/suite-jvm-r13346-fs.csv`; of the failures, `TRACE` depends on
+timing, and `MutexSemaphore` hung once at exit and passes when run again).
+Run as root, 395 (`suite-jvm-r13346-fs-root.csv`): `File`, `Stream` and
+`SysFileXXX` then fail as they would natively, because root may write to
+read-only files. Before the file system calls went through the launcher
+(permissions, rename, symbolic links, times, `chdir`): 388, run as root
+(`suite-jvm-r13346-rxapi.csv`); 384 with the native libraries but without
+the shared API server (`suite-jvm-r13346-api.csv`), 379 with commands
 (`suite-jvm-r13346-cmd.csv`), 353 before commands (`suite-jvm-r13346.csv`).
 The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 (written on r13289).
