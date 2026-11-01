@@ -18,7 +18,8 @@ native, about 3.4 times slower. External commands (`ADDRESS SYSTEM`,
 host through Java's `ProcessBuilder`. Not available yet: sockets, Java
 from Rexx, HALT (Ctrl-C), queues shared between processes (no `rxapi`
 daemon). ooRexx's official test suite (test/trunk
-r13347): 353 of 405 test groups pass (`results/suite-jvm-r13346.csv`).
+r13347): 379 of 405 test groups pass (`results/suite-jvm-r13346-cmd.csv`;
+353 before commands, `suite-jvm-r13346.csv`).
 The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 (written on r13289).
 
