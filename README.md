@@ -19,14 +19,29 @@ host through Java's `ProcessBuilder`. The Rexx API server (external
 data queues, registrations, the macrospace) is shared between processes,
 as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
-(users, sessions, signals, owners) fails as unsupported. Not available yet: sockets, Java from Rexx, HALT
+(users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
+Not available yet: Java from Rexx, HALT
 (Ctrl-C). ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
-suite's native libraries) by a user other than root: 398 of 405 test groups
-pass (`results/suite-jvm-r13346-rxunixsys.csv`; of the failures,
-`TRACE_TraceObject` depends on timing; the groups the suite restricts to
-Unix skip, because its framework does not know the OS "WASI"). With
-rxunixsys not yet embedded, 396 (`suite-jvm-r13346-fs.csv`).
+suite's native libraries) by a user other than root: **401 of 405** test
+groups pass (`results/suite-jvm-r13346-sockets.csv`). The four failures depend
+on timing and pass when run again: `RexxContext`, `TRACE`,
+`TRACE_TraceObject`, and `MutexSemaphore`, whose `test_exclusion` can leave a
+thread waiting for ever when the main thread wins the last acquisition (the
+test's race; it shows here because threads are scheduled more slowly).
+
+That count includes, as passed with no tests, the groups the suite restricts
+to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
+its framework does not know the OS "WASI" and skips them.
+`scripts/suite-with-wasi.sh` makes a copy of the suite whose framework knows
+it; there **396 of 405** pass (`suite-jvm-r13346-sockets-wasi-os.csv`):
+`tilde` passes; `SysUnix` fails `crypt`'s `$3$` and six `SysStat` of the
+native rxapi's socket (ours is named differently); there are no message
+catalogs (`SysGetMessage`), no ncurses, and `utilities/rxapi` tests the
+native daemon; the rest of the failures are the timing ones (`BEEP`, `GUARD`
+among them on that run). Earlier: 398 before sockets
+(`suite-jvm-r13346-rxunixsys.csv`), 396 before rxunixsys
+(`suite-jvm-r13346-fs.csv`).
 Run as root, 395 (`suite-jvm-r13346-fs-root.csv`): `File`, `Stream` and
 `SysFileXXX` then fail as they would natively, because root may write to
 read-only files. Before the file system calls went through the launcher
