@@ -18,12 +18,15 @@ native, about 3.4 times slower. External commands (`ADDRESS SYSTEM`,
 host through Java's `ProcessBuilder`. The Rexx API server (external
 data queues, registrations, the macrospace) is shared between processes,
 as natively, through a daemon that is the launcher itself (see *The shared
-API server* below). Not available yet: sockets, Java from Rexx, HALT
+API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
+(users, sessions, signals, owners) fails as unsupported. Not available yet: sockets, Java from Rexx, HALT
 (Ctrl-C). ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
-suite's native libraries) by a user other than root: 396 of 405 test groups
-pass (`results/suite-jvm-r13346-fs.csv`; of the failures, `TRACE` depends on
-timing, and `MutexSemaphore` hung once at exit and passes when run again).
+suite's native libraries) by a user other than root: 398 of 405 test groups
+pass (`results/suite-jvm-r13346-rxunixsys.csv`; of the failures,
+`TRACE_TraceObject` depends on timing; the groups the suite restricts to
+Unix skip, because its framework does not know the OS "WASI"). With
+rxunixsys not yet embedded, 396 (`suite-jvm-r13346-fs.csv`).
 Run as root, 395 (`suite-jvm-r13346-fs-root.csv`): `File`, `Stream` and
 `SysFileXXX` then fail as they would natively, because root may write to
 read-only files. Before the file system calls went through the launcher
