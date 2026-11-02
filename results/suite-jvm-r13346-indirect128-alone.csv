@@ -1,0 +1,7 @@
+group,status,ran,assertions,failures,errors,seconds
+ooRexx/base/class/EventSemaphore.testGroup,ok,9,30,0,0,3
+ooRexx/base/keyword/GUARD.testGroup,ok,24,26,0,0,3
+ooRexx/base/keyword/TRACE.testGroup,ok,57,147,0,0,3
+ooRexx/base/keyword/TRACE_TraceObject.testGroup,ok,10,1149,0,0,3
+ooRexx/samples/scclient.testGroup,ok,2,16,0,0,8
+ooRexx/samples/sfclient.testGroup,ok,2,16,0,0,9
