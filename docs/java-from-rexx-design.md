@@ -5,7 +5,7 @@ our own, BSF4ooRexx compatibility on top of it, our own API too) was agreed
 with Josep Maria on 02/11/2026; everything below it is a proposal. The two
 hypotheses in "Threads" were checked by a prototype the same day: both
 hold. The embedded mode was built the same day too (see "The embedded mode,
-as built").*
+as built"), and the mini-JNI after it (see "The mini-JNI, as built").*
 
 ## The question
 
@@ -213,6 +213,60 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   from another thread): it comes with the mini-JNI, when Rexx can call
   Java at all.
 
+## The mini-JNI, as built (02/11/2026)
+
+- **A real `JNIEnv`.** `compat/orx_jni.c` fills the JDK's own `jni.h` tables
+  (`JNINativeInterface_`, `JNIInvokeInterface_`), taken at build time from the
+  JDK that builds the launcher, with `compat/jni/jni_md.h` for wasm32 (`jlong`
+  is `long long`). C code written against JNI compiles unchanged. Each
+  function calls one import of the module `jni` (`host/.../Jni.java`, 38
+  functions). `orx_jni_env()` and `orx_jni_vm()` give the `JNIEnv` and the
+  `JavaVM`; `JNI_GetCreatedJavaVMs` returns the one JVM, `JNI_CreateJavaVM`
+  says `JNI_EEXIST`.
+- **Handles.** A `jobject` is an index into the launcher's object table, cast
+  to a pointer; `NULL` is null. Local, global and weak global references as in
+  JNI. Local references belong to the thread's current frame: a frame is
+  pushed by `AttachCurrentThread` (popped by `DetachCurrentThread`), by
+  `PushLocalFrame`, and (layer 1) around each call from Java into the module.
+  A thread that uses the `JNIEnv` without attaching has a base frame, never
+  popped. `jmethodID` and `jfieldID` index tables of methods and fields,
+  cached per class and never freed.
+- **One `JNIEnv` for every thread.** Every wasm thread is a Java thread, so the
+  launcher knows the caller: local references and the pending exception are
+  per Java thread. `GetEnv` says `JNI_EDETACHED` until the thread attaches,
+  which is what BSF4ooRexx tests to decide whether to detach afterwards.
+- **Calls.** The arguments go to the launcher as they come: a `jvalue[]`, or
+  the C `va_list` itself, which in wasm32 is a pointer to the arguments,
+  promoted (`int`, `double`) and aligned to their size; the method's
+  descriptor says how to read them. So the variadic functions need no
+  signature cache in C. Methods are called by reflection; a public method of a
+  class Java does not let us reach (a JDK implementation class) is called
+  through the same method of a public supertype; nonvirtual calls use
+  `MethodHandles` (`unreflectSpecial`).
+- **Copies.** `Get...Chars` and `Get...ArrayElements` (and the `Critical`
+  ones) always copy (`isCopy` is `JNI_TRUE`); `Release...` writes back unless
+  `JNI_ABORT` and frees unless `JNI_COMMIT`. Strings are modified UTF-8 out;
+  in, standard UTF-8's four-byte forms are accepted too.
+- **Left out** (`NULL` entries): `DefineClass`, `AllocObject`,
+  `RegisterNatives`, `UnregisterNatives`, `FromReflected...` /
+  `ToReflected...`, direct buffers, `GetModule`, `IsVirtualThread`. Monitors
+  are a reentrant lock per object, which does not exclude Java code
+  `synchronized` on the same object (nothing in `BSF4ooRexx.cc` uses them).
+- **Test** (`tests/jni/`, a tool of `dist-test`): 100 checks, all pass; 0.5 µs
+  per `CallIntMethod`; 8 threads at once. `dist/rexx.wasm` does not contain
+  it yet: nothing in the interpreter calls it, so the linker leaves it out
+  until layer 1 does.
+- **`rexxj` honours `CLASSPATH`** (`-cp` instead of `-jar`): `FindClass` uses
+  the thread's context class loader, the application's.
+
+**The boundary between layers 0 and 1 is not where it was drawn.** The real
+`BSF()` (`BSF4ooRexx.cc`, line 7242) needs the `RexxAndJava` object (`rajo`)
+of an initialized BSF4ooRexx; that object is made by Java (`Java4Rexx`,
+`RexxEngine`), which calls `native` methods back in C on the way
+(`jniSetupNativeJVMPointer`, `jniInitialize4Rexx`...). So `BSF()` as the
+first client already needs part of layer 1: `BSF4ooRexx.cc` compiled into the
+module, and the start-up `native` methods redirected to it.
+
 ## Other implications
 
 - **Speed.** Chicory translates the module to JVM bytecode. Each emulated
@@ -234,6 +288,7 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 1. Prototype the two thread hypotheses (re-entry; a foreign thread through
    `thread-spawn`). Done.
 2. The embedded mode. Done (strings only).
-3. The mini-JNI and the object table, with `BSF()` as the first client.
+3. The mini-JNI and the object table. Done (phase A). Then `BSF()` as the
+   first client (phase B), which already needs part of layer 1 (above).
 4. The rest of BSF4ooRexx, measured with its `testUnits/`.
 5. Layer 2.

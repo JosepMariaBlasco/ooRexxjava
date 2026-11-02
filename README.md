@@ -30,7 +30,9 @@ on timing and pass when run again: `RexxContext`, `TRACE`,
 thread waiting for ever when the main thread wins the last acquisition (the
 test's race; it shows here because threads are scheduled more slowly).
 After the embedded mode (`suite-jvm-r13346-embedded.csv`): 404 of 405, only
-`TRACE` failing.
+`TRACE` failing. After the mini-JNI (`suite-jvm-r13346-jni.csv`): 404 of
+405, only `BEEP` failing (timing); `MutexSemaphore` passed its tests but
+hung at exit (the race above) and had to be killed.
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
@@ -70,7 +72,7 @@ Rexx program.
 
 | In `dist/` | What |
 |---|---|
-| `rexxj` | The launcher script. |
+| `rexxj` | The launcher script. Java classes that Rexx code uses are found through `CLASSPATH`. |
 | `rexx`, `rexxc`, `rxqueue`, `rxsubcom` | The usual names, as commands: `rexx` is `rexxj`; the utilities are in the interpreter's binary (`rexxj --orx-wasm-rexxc` ...). |
 | `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Chicory's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
 | `rexx.wasm` | The interpreter as WebAssembly. Not needed by `rexxj`; `java -jar rexxj.jar rexx.wasm program.rex` translates it at start-up instead. |
@@ -94,7 +96,8 @@ libraries (`testbinaries/`: `orxfunction`, `orxmethod`, `orxclassic`,
 WebAssembly has no `dlopen`, and `testbinaries/rexxinstance` as one more tool
 (`dist-test/rexxinstance`, that is, `rexxj --orx-wasm-rexxinstance`). It is
 `oorexxwasm`'s `wasm/build-test.sh` (its patch 0007) for WASI, and it is for
-the API test groups only: run the suite with `dist-test/rexxj`.
+the API test groups only: run the suite with `dist-test/rexxj`. It also
+carries the mini-JNI's test (`dist-test/jnitest`, see `tests/jni/`).
 
 ### The saved build
 
@@ -160,6 +163,18 @@ more (`dist/rexxj` does), or deep Rexx recursion fails. This is layer 0 of
 the design, strings only; Java objects, and BSF4ooRexx on top, come next.
 One module per JVM for now. Tests: `tests/embed/`.
 
+## Java from Rexx: the mini-JNI
+
+The first piece of Java from Rexx is in place, though nothing in Rexx uses
+it yet: a real JNI inside the module, so that C code written against JNI
+(BSF4ooRexx's native library, next) can run there unchanged. `jobject`,
+`jclass`, `jmethodID` are handles of an object table kept by the launcher;
+each `JNIEnv` function is a call to the launcher (import module `jni`,
+`host/.../Jni.java`), and Java code is called by reflection on the calling
+thread. About 0.5 µs per JNI call. Design and limits in
+[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md) ("The
+mini-JNI, as built"); tests in `tests/jni/`.
+
 ## Contents
 
 | Path | What |
@@ -168,10 +183,10 @@ One module per JVM for now. Tests: `tests/embed/`.
 | `build-test.sh` | Builds `dist-test/`, the variant with the test suite's native libraries. |
 | `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
-| `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module. |
+| `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests. |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
 | `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |
 | `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |

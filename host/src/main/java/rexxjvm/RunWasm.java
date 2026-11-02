@@ -132,6 +132,7 @@ public final class RunWasm {
             .addFunction(FileSys.functions().toArray(new HostFunction[0]))
             .addFunction(Net.functions().toArray(new HostFunction[0]))
             .addFunction(Rexx.functions().toArray(new HostFunction[0]))
+            .addFunction(Jni.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
         if (machine == null && !interp) machine = MachineFactoryCompiler.compile(module);

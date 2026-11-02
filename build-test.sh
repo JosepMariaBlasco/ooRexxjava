@@ -127,9 +127,14 @@ objects+=("$T/static-libraries.o")
 defs=()
 for c in $CLASHES; do defs+=("-D$c=orxexits__$c"); done
 compile "$SRC/testbinaries/rexxinstance.cpp" "$T/rexxinstance.o" "${defs[@]}" -Dmain=orxWasmRexxinstanceMain
+# the mini-JNI's test (tests/jni/), one more tool: rexxj --orx-wasm-jnitest
+JNI_INCLUDE=$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")/include
+"$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -I "$C/jni" -I "$JNI_INCLUDE" \
+  -Dmain=orxWasmJnitestMain -c "$HERE/tests/jni/jnitest.c" -o "$T/jnitest.o"
 cat > "$T/extra-tool.cpp" <<'CPP'
 #include <string.h>
 int orxWasmRexxinstanceMain(int argc, char **argv);
+extern "C" int orxWasmJnitestMain(int argc, char **argv);
 // rexx.cpp: the tools a build adds (rexxj --orx-wasm-TOOL)
 extern "C" bool orxWasmExtraTool(const char *tool, int argc, char **argv, int *rc)
 {
@@ -138,11 +143,16 @@ extern "C" bool orxWasmExtraTool(const char *tool, int argc, char **argv, int *r
         *rc = orxWasmRexxinstanceMain(argc, argv);
         return true;
     }
+    if (strcmp(tool, "jnitest") == 0)
+    {
+        *rc = orxWasmJnitestMain(argc, argv);
+        return true;
+    }
     return false;
 }
 CPP
 compile "$T/extra-tool.cpp" "$T/extra-tool.o"
-objects+=("$T/rexxinstance.o" "$T/extra-tool.o")
+objects+=("$T/rexxinstance.o" "$T/jnitest.o" "$T/extra-tool.o")
 
 # relink rexx_exe's own command with the objects, into bin-test/rexx
 mkdir -p "$BUILD/bin-test"
@@ -156,4 +166,9 @@ cp "$BUILD/bin-test/rexx" "$WORK/dist-test/rexx.wasm"
 cp "$HERE/host/target/rexxj.jar" "$WORK/dist-test/"
 printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-rexxinstance "$@"\n' > "$WORK/dist-test/rexxinstance"
 chmod +x "$WORK/dist-test/rexxinstance"
+# the mini-JNI's test, with the Java class it calls
+mkdir -p "$WORK/dist-test/jnitest-classes"
+javac -d "$WORK/dist-test/jnitest-classes" "$HERE/tests/jni/jnitest/JniTarget.java"
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nCLASSPATH="$D/jnitest-classes${CLASSPATH:+:$CLASSPATH}" exec "$D/rexxj" --orx-wasm-jnitest "$@"\n' > "$WORK/dist-test/jnitest"
+chmod +x "$WORK/dist-test/jnitest"
 echo "done: $WORK/dist-test/rexxj program.rex"
