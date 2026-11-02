@@ -216,7 +216,7 @@ java -Xss16m -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. 
 ```
 
 Test and its notes in `tests/jsr223/` (about 20 ms per `invokeFunction` for
-now, mostly the interpreter's speed).
+now, 1 ms natively: mostly the interpreter's speed).
 
 ## Threads and their stacks
 

@@ -56,3 +56,20 @@ With `testUnits/ooRexxUnit`'s own framework the counts are the same apart from
 16 errors (`assertSameList`) and 30 in `lex` (its procedural groups, run first,
 unregister beans that `BSF.CLS` keeps cached; not seen with ooRexx's
 framework, nor with `lex/oo` alone).
+
+**Compared with a native BSF4ooRexx** (02/11/2026): ooRexx r13346's `.deb`,
+`BSF4ooRexx.cc` (same commit) compiled with g++ as its `Makefile-64-linux`
+does, the same `bsf4oorexx.jar` and `BSF.CLS`, Java 21. With ooRexx's
+framework every group gives exactly the counts of the table above, no
+failures, no errors. With `testUnits/ooRexxUnit`'s framework, natively too: 16
+errors in `rgf` (4), `java8` (6), `java6` (6), and 30 in `lex` (`java.lang.Class`
+objects that no longer understand `GETCLASS`, SYNTAX 97.1). So none of those is
+ours: they are that old framework with these groups.
+
+```bash
+g++ -fPIC -O2 -DUNIX -m64 -DBSF4REXX_64_BIT -DUSE_OREXX -I. -I/usr/local/include \
+    -I$JAVA_HOME/include -I$JAVA_HOME/include/linux -shared -rdynamic \
+    -o libBSF4ooRexx850.so BSF4ooRexx.cc -L/usr/local/lib -lrexx -lrexxapi -lpthread -ldl
+# run with LD_LIBRARY_PATH=<that dir>:$JAVA_HOME/lib/server, BSF.CLS on PATH,
+# bsf4oorexx.jar on CLASSPATH
+```

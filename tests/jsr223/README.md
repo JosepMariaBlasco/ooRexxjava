@@ -35,11 +35,18 @@ running wasm code, so each one is a foreign entry (a pthread and an `Instance`
 of the module). A profile (JFR, 400 calls) puts creating those `Instance`s at
 about 16% of the time; nearly all the rest is wasm code running (the
 interpreter, running the Rexx side of each call), so most of it is the
-interpreter's raw speed (`rexxcps`: 15–16 times slower than native). Not
-compared with a native BSF4ooRexx yet.
+interpreter's raw speed (`rexxcps`: 15–16 times slower than native).
+
+**Natively** (ooRexx r13346 and `BSF4ooRexx.cc` compiled with g++: see
+`tests/bsf/README.md`), the same program passes all 21 checks, with 0.5 s to
+the first result and 1.0–1.1 ms per `invokeFunction` (1,000 calls; here 20.6–21.4
+ms, 400 calls, same machine, one after the other): about 19 times slower,
+about 16 without the `Instance`s, as `rexxcps`. Run it natively with
+`java -Xss16m -Djava.library.path=<the library's dir>` and
+`bsf4oorexx.jar` on the class path, no agent.
 
 Three things that are BSF4ooRexx's behaviour, not ours (its Java code runs
-unchanged):
+unchanged; natively they are the same):
 
 - `SAY` goes to the context's writer only if the writer is set **before the
   engine's first `eval`**: `RexxScriptEngine` does not replace `.output` once it
