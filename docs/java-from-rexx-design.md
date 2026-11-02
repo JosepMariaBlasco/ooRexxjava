@@ -2,9 +2,9 @@
 
 *Status: proposal for discussion. The direction (option 3: a small core of
 our own, BSF4ooRexx compatibility on top of it, our own API too) was agreed
-with Josep Maria on 02/11/2026; everything below it is a proposal, and the
-two hypotheses in "Threads" must be checked by a prototype before anything
-is built on them.*
+with Josep Maria on 02/11/2026; everything below it is a proposal. The two
+hypotheses in "Threads" were checked by a prototype the same day: both
+hold.*
 
 ## The question
 
@@ -158,6 +158,15 @@ parked in `thread-spawn` can remove most of it.
 not, the fallback is delegation: a wasm thread runs the Rexx code, and its
 calls into Java are shipped back to T, which waits serving them; uglier and
 slower, but correct for thread identity.
+
+**Result (02/11/2026): both hypotheses hold**, on a small module, compiled
+machine and interpreter: see
+[`prototypes/threads/`](../prototypes/threads/README.md). 0.17–0.45 ms per
+foreign entry with the compiled machine. Two requirements came out of it:
+threads created for foreign entries need an explicit wasm stack (linear
+memory has no guard page: wasi-libc's default stack overflowed silently),
+and foreign Java threads need a large Java stack (`-Xss`; with Java's
+default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 
 ## Other implications
 
