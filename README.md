@@ -34,6 +34,12 @@ After the embedded mode (`suite-jvm-r13346-embedded.csv`): 404 of 405, only
 405, only `BEEP` failing (timing); `MutexSemaphore` passed its tests but
 hung at exit (the race above) and had to be killed. With BSF4ooRexx linked
 in (`suite-jvm-r13346-bsf.csv`): 404 of 405, only `GUARD` failing (timing).
+With the threads' C stack at 256 KB (`suite-jvm-r13346-threadstack.csv`):
+402 of 405; `TRACE_TraceObject` and `scclient` failed and pass when run
+again, and `ProcessInvocation` went over the 300 s limit (253 s on the run
+before), on a machine slower than usual at the time (rexxcps 10-15% below
+its own earlier figure); the slow groups, run alone, take the same with
+8 MB and with 256 KB.
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
