@@ -8,4 +8,4 @@ HERE=$(dirname "$(readlink -f "$0")")
 D=${1:-/home/claude/work/dist}
 OUT=$(mktemp -d)
 javac -d "$OUT" -cp "$D/bsf4oorexx.jar" "$HERE/Jsr223.java"
-exec java -Xss16m -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar:$OUT" Jsr223
+exec java -Xss16m -XX:-DontCompileHugeMethods -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar:$OUT" Jsr223

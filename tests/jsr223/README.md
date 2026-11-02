@@ -11,7 +11,8 @@ env -u JAVA_TOOL_OPTIONS tests/jsr223/run.sh [DIST]    # DIST: /home/claude/work
 ```
 
 What a host needs (`run.sh`): `rexxj.jar` as a Java agent and on the class
-path, `bsf4oorexx.jar` on the class path, and a large Java stack (`-Xss16m`).
+path, `bsf4oorexx.jar` on the class path, a large Java stack (`-Xss16m`), and
+`-XX:-DontCompileHugeMethods` (the main `README.md` says why).
 Nothing else: `BSF.CLS` and the other `.cls` are found beside `rexx.img`
 (`-Drexxjvm.home`, by default the directory of `rexxj.jar`), which the embedded
 mode puts first in the module's `PATH`, as the `rexxj` script does.

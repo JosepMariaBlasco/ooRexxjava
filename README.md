@@ -168,8 +168,11 @@ calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
 the calling Java thread, attached to the instance) is in
 [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Chicory's
 frames live on the calling thread's Java stack: give the JVM `-Xss16m` or
-more (`dist/rexxj` does), or deep Rexx recursion fails. Strings only: Java
-objects cross through BSF4ooRexx (below).
+more (`dist/rexxj` does), or deep Rexx recursion fails. Give it also
+`-XX:-DontCompileHugeMethods` (`dist/rexxj` does): HotSpot never JIT-compiles
+a method over 8,000 bytes of bytecode, some of the interpreter's functions
+become such methods, and the interpreter runs about 1.8 times faster with it
+(`rexxcps`). Strings only: Java objects cross through BSF4ooRexx (below).
 One module per JVM for now. Tests: `tests/embed/`.
 
 ## Java from Rexx: BSF4ooRexx
@@ -203,7 +206,7 @@ too.
 The other direction works as well: a Java program can run Rexx through
 JSR-223 (`javax.script`), with BSF4ooRexx's own script engine, without naming
 any class of ours. It needs `rexxj.jar` as a Java agent and on the class path,
-`bsf4oorexx.jar` on the class path, and `-Xss16m`; the module starts by itself
+`bsf4oorexx.jar` on the class path, `-Xss16m` and `-XX:-DontCompileHugeMethods`; the module starts by itself
 the first time BSF4ooRexx needs it, and finds `BSF.CLS` beside `rexx.img`.
 
 ```java
@@ -212,7 +215,7 @@ Object r = rexx.eval("return reverse('hi!')");    // "!ih"
 ```
 
 ```bash
-java -Xss16m -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. MyHost
+java -Xss16m -XX:-DontCompileHugeMethods -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. MyHost
 ```
 
 Test and its notes in `tests/jsr223/` (about 20 ms per `invokeFunction` for
