@@ -52,6 +52,28 @@ four (20,201 assertions, 13 s); in the fourth more threads were alive at
 once, the heap ran out (each thread also has its `Instance` of the module)
 and the run hung.
 
+Since the linear memory is off-heap (`FlatMemory`, 02/11/2026) the heap no
+longer runs out, and 10,201 meets the module's own limit instead: with 256 KB
+stacks, when more than about 8,000 threads are alive at once their stacks do
+not fit in the 2 GB of linear memory, and `pthread_create` fails as Rexx's
+`Error 48.1: Failure in system service: ERROR CREATING THREAD` (or a thread
+silently missing: 8,113 of 10,201 in one run); with `REXXJVM_THREADSTACK=128K`
+(1.3 GB for all of them) that no longer happens. Two things seen on the way,
+neither ours:
+
+- The test's own handler (`syntax:` in `80_test_Multithreading_via_Java_threads.rex`)
+  calls `pp`, whose `id2x` (`rgf_util2.rex`, also in `BSF.CLS`) fails on a 32-bit
+  interpreter for an object above 1,000 MB: `numeric digits 9` and a 10-digit
+  `identityHash` (`Error 93.928: D2X value must be a valid whole number`), which
+  hides the condition being reported. A copy with one more digit, found first
+  through `REXX_PATH`, shows it.
+- Sometimes nearly all of the 100 controllers wait out their 201 s and fail
+  their "active thread counter" assertion (raised as SYNTAX 93.964 in the Java
+  thread, so not counted as a failure; the run ends with fewer assertions,
+  about 250 s instead of 20). Natively too (native BSF4ooRexx, 1 run of 3:
+  217 s, 99 controllers), and with `ByteArrayMemory` (2 of 3): the test under
+  this load on 2 cores, not the memory.
+
 With `testUnits/ooRexxUnit`'s own framework the counts are the same apart from
 16 errors (`assertSameList`) and 30 in `lex` (its procedural groups, run first,
 unregister beans that `BSF.CLS` keeps cached; not seen with ooRexx's
