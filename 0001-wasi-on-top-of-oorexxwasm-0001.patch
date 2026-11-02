@@ -17,15 +17,22 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
  endif ()
  # Library definition
  if (ORX_WASM)
-@@ -1003,6 +1010,11 @@
+@@ -1003,6 +1010,18 @@
                ${build_extensions_rxsock_dir}/rxsock.cpp
                ${build_extensions_rxsock_dir}/rxsockfn.cpp
                ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
 +  elseif (CMAKE_SYSTEM_NAME STREQUAL "WASI")
 +    # WASI: rxunixsys too, its calls over the host where it has them
-+    # (stat, chmod...), the rest failing as unsupported
++    # (stat, chmod...), the rest failing as unsupported; and rxsock, its
++    # socket calls redirected to the host's sockets (orx_wasi_net.h, on the
++    # include path of the build's flags)
 +    list (APPEND wasm_embedded_package_sources
++              ${build_extensions_rxsock_dir}/rxsock.cpp
++              ${build_extensions_rxsock_dir}/rxsockfn.cpp
 +              ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
++    set_source_files_properties(${build_extensions_rxsock_dir}/rxsock.cpp
++              ${build_extensions_rxsock_dir}/rxsockfn.cpp
++              PROPERTIES COMPILE_OPTIONS "-include;orx_wasi_net.h")
    endif ()
    set_source_files_properties(${wasm_embedded_package_sources}
                PROPERTIES COMPILE_DEFINITIONS ORX_EMBEDDED_PACKAGE)
@@ -52,7 +59,20 @@ diff -ruN oorexx.ref/common/platform/unix/SysFile.cpp oorexx/common/platform/uni
 diff -ruN oorexx.ref/interpreter/package/PackageManager.cpp oorexx/interpreter/package/PackageManager.cpp
 --- oorexx.ref/interpreter/package/PackageManager.cpp
 +++ oorexx/interpreter/package/PackageManager.cpp
-@@ -93,7 +93,7 @@
+@@ -83,17 +83,17 @@
+ // Extension packages linked into the WASM interpreter (there is no dlopen).
+ // They are registered as internal packages when the image is built, so
+ // ::REQUIRES of their .cls files and RxFuncAdd() find them without loading
+-// a shared library.  Sockets and rxunixsys's system calls only under
+-// Emscripten (WASI preview 1 has neither).
++// a shared library.  Sockets and rxunixsys's system calls under Emscripten,
++// and under WASI through the host (WASI preview 1 has neither).
+ const PackageManager::EmbeddedPackage PackageManager::embeddedPackages[] =
+ {
+-#if defined(__EMSCRIPTEN__)
++#if defined(__EMSCRIPTEN__) || defined(__wasi__)
+     { "rxsock",   &rxsock_package_entry,   true },
+ #endif
      { "rxregexp", &rxregexp_package_entry, true },
      { "rxmath",   &rxmath_package_entry,   true },
      { "hostemu",  &hostemu_package_entry,  false },

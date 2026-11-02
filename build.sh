@@ -32,9 +32,11 @@ C=$HERE/compat
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -c "$C/orx_wasi_host.c" -o host.o
 # file system calls done by the launcher instead of WASI (stat, access, chmod, rename, utimes)
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -D_GNU_SOURCE -c "$C/orx_wasi_fs.c" -o fs.o
+# IPv4 sockets for rxsock through the launcher (orx_wasi_net.h redirects rxsock's calls)
+"$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -D_GNU_SOURCE -isystem "$C" -c "$C/orx_wasi_net.c" -o net.o
 EMU="-D_WASI_EMULATED_SIGNAL -D_WASI_EMULATED_GETPID -D_WASI_EMULATED_PROCESS_CLOCKS -D_WASI_EMULATED_MMAN"
 CF="-isystem $C -include $C/orx_wasi_compat.h -fwasm-exceptions -mllvm -wasm-use-legacy-eh=false $EMU"
-LF="$WORK/stubs.o $WORK/host.o $WORK/fs.o -fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
+LF="$WORK/stubs.o $WORK/host.o $WORK/fs.o $WORK/net.o -fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
 sed "s|^\tset(WASI_SDK_PREFIX .*|\tset(WASI_SDK_PREFIX $W)|" "$HERE/wasi-p1-threads.cmake" > toolchain.cmake
 cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_FLAGS="$CF" -DCMAKE_CXX_FLAGS="$CF" -DCMAKE_EXE_LINKER_FLAGS="$LF" \
@@ -43,7 +45,7 @@ cmake --build build --target rexx_exe rexx_img -j"$(nproc)"
 mkdir -p dist && cp build/bin/rexx dist/rexx.wasm && cp build/bin/rexx.img dist/
 # the Rexx side of the embedded native packages (::requires "rxregexp.cls"),
 # and the extensions written in Rexx alone
-for f in rxregexp/rxregexp.cls json/json.cls yaml/yaml.cls logicalwrapper/logicalwrapper.cls \
+for f in rxregexp/rxregexp.cls rxsock/socket.cls rxsock/streamsocket.cls rxsock/mime.cls rxsock/smtp.cls json/json.cls yaml/yaml.cls logicalwrapper/logicalwrapper.cls \
          dateparser/dateparser.cls csvStream/csvStream.cls; do
   cp "oorexx/extensions/$f" dist/
 done
@@ -53,7 +55,7 @@ mkdir -p dist/samples && find oorexx/samples -maxdepth 1 -type f ! -name CMakeLi
 # (Chicory's build-time compiler), so that start-up does not translate it again
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
 cp "$HERE/host/target/rexxj.jar" dist/
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Drexxjvm.executable="$D/rexxj" -Drexxjvm.home="$D" -jar "$D/rexxj.jar" "$@"\n' > dist/rexxj
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -jar "$D/rexxj.jar" "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
 # the usual names, as commands (the test suite runs "rexx ..."): rexx is rexxj; the
 # utilities are in the interpreter's binary (multi-call, rexx --orx-wasm-TOOL)

@@ -101,6 +101,7 @@ public final class RunWasm {
             .addFunction(Host.functions().toArray(new HostFunction[0]))
             .addFunction(RxApi.functions().toArray(new HostFunction[0]))
             .addFunction(FileSys.functions().toArray(new HostFunction[0]))
+            .addFunction(Net.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
         machine = interp ? null
