@@ -225,11 +225,15 @@ now, 1 ms natively: mostly the interpreter's speed).
 
 Every Rexx thread (`START`, `REPLY`, a Java thread calling Rexx) is a wasm
 thread: a Java thread of its own, with a C stack taken from the module's
-linear memory, which is all Java heap. The main thread has 8 MB; the others
-**256 KB** by default, enough for about 2,600 levels of Rexx recursion
-(natively, with 8 MB, about 22,500) and for about 8,000 live threads (512 KB
-would exhaust Java's default heap with the 2,601 threads of BSF4ooRexx's
-stress test).
+linear memory. The main thread has 8 MB; the others **256 KB** by default,
+enough for about 2,600 levels of Rexx recursion (natively, with 8 MB, about
+22,500) and for about 8,000 live threads: the linear memory is 2 GB at most,
+and the stacks of the threads alive at once must fit in it.
+The linear memory is not Java heap: it is one block outside it
+(`FlatMemory`), reserved at its maximum size, whose pages the operating
+system provides only when they are first touched; so a stack costs what it
+uses, not its size (200 live threads with 8 MB stacks: 245 MB of resident
+memory in all).
 Recursion deeper than the stack ends in error 11, as natively. To change it,
 `REXXJVM_THREADSTACK` in the environment, or `-Drexxjvm.threadstack` for a
 Java host (bytes, or with `K` or `M`: `2M` gives about 25,000 levels;

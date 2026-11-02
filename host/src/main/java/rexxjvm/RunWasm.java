@@ -114,7 +114,7 @@ public final class RunWasm {
         // the shared memory the module imports (wasi-threads modules import "env" "memory")
         MemoryImport mi = module.importSection().stream()
             .filter(i -> i instanceof MemoryImport).map(i -> (MemoryImport) i).findFirst().orElseThrow();
-        Memory memory = new ByteArrayMemory(mi.limits());
+        Memory memory = FlatMemory.create(mi.limits());   // FlatMemory, unless -Drexxjvm.memory=bytearray
 
         HostFunction spawn = new HostFunction("wasi", "thread-spawn",
             List.of(ValType.I32), List.of(ValType.I32), (inst, a) -> {

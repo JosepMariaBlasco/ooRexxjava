@@ -331,8 +331,41 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   `rgf_multithreading`, nearly all alive at once, then exhaust Java's
   default heap (1.5 GB here). A memory that allocates its pages when first
   touched (a `Memory` of our own for Chicory) would make large stacks cost
-  only what they use (`todo`). All of
+  only what they use: done, see "The linear memory, outside the heap". All of
   `rgf_multithreading`'s cases pass (`tests/bsf/README.md`).
+
+## The linear memory, outside the heap (02/11/2026)
+
+Not a matter of Java and Rexx only, but found here. Chicory 1.7.5's
+`ByteArrayMemory` keeps the linear memory as 64 KB pages (`byte[][]`): every
+access finds its page, checks whether it crosses into the next one, and
+indexes two arrays (a JFR profile of `rexxcps`: about 39% of the time in
+memory accesses); and it allocates every page in the Java heap as soon as the
+memory grows, so each thread's C stack costs its whole size ("Memory per
+thread" above).
+
+`host/.../FlatMemory.java` implements Chicory's `Memory` interface, which is
+all the translated module uses (`invokeinterface` on it; one implementation
+loaded, so the JIT inlines it). It is one block outside the heap, allocated
+with `sun.misc.Unsafe` at the module's maximum size (32,767 pages, Chicory's
+limit) when the memory is created. A block that large comes from `mmap`:
+zero-filled pages that the operating system provides when first touched (a
+few spots are checked; if they were not zero, the block is cleared, correct
+but no longer lazy). An access is one bounds check, against a plain field
+that a stale value can only make smaller, confirmed against the `volatile`
+page count before trapping, and one load. Atomics as Chicory's: sequentially
+consistent (`Unsafe`'s volatile accesses, CAS, get-and-add/set), byte and
+short ones as a CAS of the aligned word that holds them, unaligned atomics
+trap; `wait`/`notify` with the same bookkeeping as `ByteArrayMemory` (waiters
+and the wake-ups owed to them, per address). Wasm is little-endian: values
+are byte-swapped on a big-endian machine. `-Drexxjvm.memory=bytearray` goes
+back to `ByteArrayMemory`.
+
+Measured (2 cores, Java 21, with `-XX:-DontCompileHugeMethods`): `rexxcps`
+1.19–1.23 M clauses/s, against 0.99–1.05 M with `ByteArrayMemory` (runs
+alternated). 200 live threads with 8 MB stacks: 245 MB of resident memory in
+all, where `ByteArrayMemory` reached 1.6 GB and failed; with 256 KB stacks,
+250 MB against 313 MB.
 
 ## JSR-223, as built (02/11/2026)
 
