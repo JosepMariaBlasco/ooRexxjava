@@ -27,7 +27,7 @@ fi
 JAR=$HERE/host/target/rexxjvm-0.1.jar
 printf '#!/bin/sh\nexec java -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm
 C=$HERE/compat
-"$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -c "$C/orx_wasi_stubs.c" -o stubs.o
+"$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -isystem "$C" -c "$C/orx_wasi_stubs.c" -o stubs.o
 # the host functions of SysWasmHost.hpp over the launcher's imports (commands, paths)
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -c "$C/orx_wasi_host.c" -o host.o
 # file system calls done by the launcher instead of WASI (stat, access, chmod, rename, utimes)

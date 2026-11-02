@@ -17,6 +17,8 @@
  *   - chdir: wasi-libc keeps the current directory as the string it was
  *     given, joined to the old one ("cd x/.." left "/d/x/.."): it is set to
  *     the host's real path instead, as a POSIX getcwd() returns it.
+ *   - symlink: Chicory 1.7.5 takes the target for a path to resolve, and
+ *     refuses an absolute one (EACCES): the target is stored as given.
  *   - utimes/utime: as for stat, no time before 1970.
  *
  * Also, an empty path names nothing (ENOENT), as in POSIX; under WASI it was
@@ -51,6 +53,8 @@ RXJ_IMPORT(file_rename)
 int rxj_file_rename(const char *from, const char *to);
 RXJ_IMPORT(file_real_path)
 int rxj_file_real_path(const char *path, char *buf, int size);
+RXJ_IMPORT(file_symlink)
+int rxj_file_symlink(const char *target, const char *link);
 RXJ_IMPORT(file_set_times)
 int rxj_file_set_times(const char *path, int flags, int64_t atime, int64_t mtime);
 
@@ -286,4 +290,16 @@ int orx_wasi_chdir(const char *p)
         return rxj_result(rc);
     }
     return chdir(real);
+}
+
+int orx_wasi_symlink(const char *target, const char *link)
+{
+    char buf[PATH_MAX];
+    if (target == NULL || *target == '\0')
+    {
+        errno = ENOENT;
+        return -1;
+    }
+    const char *path = rxj_path(link, buf, sizeof(buf));
+    return path == NULL ? -1 : rxj_result(rxj_file_symlink(target, path));
 }

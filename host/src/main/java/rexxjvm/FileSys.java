@@ -68,6 +68,9 @@ final class FileSys {
                                                  path(inst.memory(), (int) a[1])) }),
             new HostFunction("rexxjvm", "file_real_path", List.of(ValType.I32, ValType.I32, ValType.I32), i32,
                 (inst, a) -> new long[] { realPath(inst.memory(), path(inst.memory(), (int) a[0]), (int) a[1], (int) a[2]) }),
+            new HostFunction("rexxjvm", "file_symlink", List.of(ValType.I32, ValType.I32), i32,
+                (inst, a) -> new long[] { symlink(inst.memory().readCString((int) a[0], StandardCharsets.UTF_8),
+                                                  path(inst.memory(), (int) a[1])) }),
             new HostFunction("rexxjvm", "file_set_times",
                 List.of(ValType.I32, ValType.I32, ValType.I64, ValType.I64), i32,
                 (inst, a) -> new long[] { setTimes(path(inst.memory(), (int) a[0]), (int) a[1], a[2], a[3]) }));
@@ -227,6 +230,19 @@ final class FileSys {
             Path r = p.toRealPath();
             if (!Files.isDirectory(r)) return ENOTDIR;
             return Host.put(m, buf, size, r.toString()) == 1 ? 0 : ENAMETOOLONG;
+        } catch (IOException | RuntimeException x) {
+            return error(x);
+        }
+    }
+
+    /** symlink(2): the target is stored as given, relative or absolute. */
+    static int symlink(String target, Path link) {
+        if (link == null) return ENOENT;
+        try {
+            Files.createSymbolicLink(link, Paths.get(target));
+            return 0;
+        } catch (InvalidPathException x) {
+            return EINVAL;
         } catch (IOException | RuntimeException x) {
             return error(x);
         }

@@ -17,6 +17,18 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
  endif ()
  # Library definition
  if (ORX_WASM)
+@@ -1003,6 +1010,11 @@
+               ${build_extensions_rxsock_dir}/rxsock.cpp
+               ${build_extensions_rxsock_dir}/rxsockfn.cpp
+               ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
++  elseif (CMAKE_SYSTEM_NAME STREQUAL "WASI")
++    # WASI: rxunixsys too, its calls over the host where it has them
++    # (stat, chmod...), the rest failing as unsupported
++    list (APPEND wasm_embedded_package_sources
++              ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
+   endif ()
+   set_source_files_properties(${wasm_embedded_package_sources}
+               PROPERTIES COMPILE_DEFINITIONS ORX_EMBEDDED_PACKAGE)
 diff -ruN oorexx.ref/common/platform/unix/SysFile.cpp oorexx/common/platform/unix/SysFile.cpp
 --- oorexx.ref/common/platform/unix/SysFile.cpp
 +++ oorexx/common/platform/unix/SysFile.cpp
@@ -37,6 +49,18 @@ diff -ruN oorexx.ref/common/platform/unix/SysFile.cpp oorexx/common/platform/uni
      // we must open this with the NOINHERIT flag added
      fileHandle = ::open64(name, openFlags, (mode_t)openMode);
      if ( fileHandle == -1 )
+diff -ruN oorexx.ref/interpreter/package/PackageManager.cpp oorexx/interpreter/package/PackageManager.cpp
+--- oorexx.ref/interpreter/package/PackageManager.cpp
++++ oorexx/interpreter/package/PackageManager.cpp
+@@ -93,7 +93,7 @@
+     { "rxregexp", &rxregexp_package_entry, true },
+     { "rxmath",   &rxmath_package_entry,   true },
+     { "hostemu",  &hostemu_package_entry,  false },
+-#if defined(__EMSCRIPTEN__)
++#if defined(__EMSCRIPTEN__) || defined(__wasi__)
+     { "rxunixsys", &orxnixclib_package_entry, false },
+ #endif
+     { NULL, NULL, false }
 diff -ruN oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp oorexx/interpreter/platform/unix/SysRexxUtil.cpp
 --- oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp
 +++ oorexx/interpreter/platform/unix/SysRexxUtil.cpp

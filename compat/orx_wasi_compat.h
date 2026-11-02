@@ -20,6 +20,28 @@ static inline pid_t getpgid(pid_t p) { (void)p; return 1; }
 static inline int getpriority(int w, unsigned int who) { (void)w; (void)who; return 0; }
 static inline int setpriority(int w, unsigned int who, int p) { (void)w; (void)who; (void)p; return -1; }
 pid_t fork(void);
+/* no sessions, users or groups to change, signals to send, owners or roots
+   in WASI preview 1 (rxunixsys calls them): they fail as unsupported */
+#include <errno.h>
+static inline pid_t getpgrp(void) { return 1; }
+static inline pid_t getsid(pid_t p) { (void)p; return 1; }
+static inline pid_t setsid(void) { errno = ENOSYS; return -1; }
+static inline int setpgid(pid_t p, pid_t g) { (void)p; (void)g; errno = ENOSYS; return -1; }
+static inline pid_t setpgrp(void) { errno = ENOSYS; return -1; }
+static inline int setuid(uid_t u) { (void)u; errno = ENOSYS; return -1; }
+static inline int seteuid(uid_t u) { (void)u; errno = ENOSYS; return -1; }
+static inline int setgid(gid_t g) { (void)g; errno = ENOSYS; return -1; }
+static inline int setegid(gid_t g) { (void)g; errno = ENOSYS; return -1; }
+static inline int setgroups(size_t n, const gid_t *l) { (void)n; (void)l; errno = ENOSYS; return -1; }
+static inline int kill(pid_t p, int s) { (void)p; (void)s; errno = ENOSYS; return -1; }
+static inline int chown(const char *f, uid_t u, gid_t g) { (void)f; (void)u; (void)g; errno = ENOSYS; return -1; }
+static inline int lchown(const char *f, uid_t u, gid_t g) { (void)f; (void)u; (void)g; errno = ENOSYS; return -1; }
+static inline int chroot(const char *d) { (void)d; errno = ENOSYS; return -1; }
+/* orx_wasi_stubs.c: umask only remembered (no permission bits are applied at
+   creation); no time zones, times are UTC (tzname "UTC") */
+mode_t umask(mode_t m);
+void tzset(void);
+extern char *tzname[2];
 #ifdef __cplusplus
 }
 #endif
@@ -45,6 +67,7 @@ int orx_wasi_rename(const char *, const char *);
 int orx_wasi_utimes(const char *, const struct timeval [2]);
 int orx_wasi_utime(const char *, const struct utimbuf *);
 int orx_wasi_chdir(const char *);
+int orx_wasi_symlink(const char *, const char *);
 #ifdef __cplusplus
 }
 #endif
@@ -59,6 +82,7 @@ int orx_wasi_chdir(const char *);
 #define utimes(p, t)  orx_wasi_utimes(p, t)
 #define utime(p, t)   orx_wasi_utime(p, t)
 #define chdir(p)      orx_wasi_chdir(p)
+#define symlink(t, l) orx_wasi_symlink(t, l)
 #ifdef __cplusplus
 /* libc++ declares std::abs(long) and std::exception_ptr only in these */
 #include <cstdlib>
