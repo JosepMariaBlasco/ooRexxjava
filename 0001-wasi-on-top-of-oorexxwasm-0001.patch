@@ -559,18 +559,20 @@ diff -ruN oorexx.ref/rexxapi/common/platform/unix/SysHostConnection.hpp oorexx/r
 diff -ruN oorexx.ref/utilities/rexx/platform/unix/rexx.cpp oorexx/utilities/rexx/platform/unix/rexx.cpp
 --- oorexx.ref/utilities/rexx/platform/unix/rexx.cpp
 +++ oorexx/utilities/rexx/platform/unix/rexx.cpp
-@@ -61,6 +61,10 @@
+@@ -61,6 +61,12 @@
  int orxWasmRxqueueMain(int argc, char **argv);
  int orxWasmRxsubcomMain(int argc, char **argv, char **envp);
  extern char **environ;
 +#if defined(__wasi__)
 +// the shared Rexx API server (rexxapi/common/platform/unix/SysHostConnection.cpp)
 +int orxWasiRxapiMain();
++// the embedded mode: the interpreter hosted by Java (compat/orx_wasi_embed.cpp)
++extern "C" int orxWasiEmbeddedMain(void);
 +#endif
  // more tools a particular build links in (wasm/build-test.sh: the test
  // suite's rexxinstance); a weak symbol, NULL in the builds that have none.
  // Returns true, with the tool's return code in *rc, if it knows the tool.
-@@ -108,6 +112,12 @@
+@@ -108,6 +114,16 @@
          {
              return orxWasmRxsubcomMain(argc - 1, argv + 1, environ);
          }
@@ -578,6 +580,10 @@ diff -ruN oorexx.ref/utilities/rexx/platform/unix/rexx.cpp oorexx/utilities/rexx
 +        if (strcmp(tool, "rxapi") == 0)
 +        {
 +            return orxWasiRxapiMain();
++        }
++        if (strcmp(tool, "embedded") == 0)
++        {
++            return orxWasiEmbeddedMain();
 +        }
 +#endif
          if (orxWasmExtraTool != NULL && orxWasmExtraTool(tool, argc - 1, argv + 1, &rc))

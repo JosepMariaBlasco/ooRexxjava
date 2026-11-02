@@ -21,7 +21,7 @@ as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
 (users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
 SIGINT (Ctrl-C), SIGTERM and SIGHUP raise HALT in the running program, as
-natively (`tests/halt.sh`). Not available yet: Java from Rexx. ooRexx's official test suite (test/trunk
+natively (`tests/halt.sh`). A Java program can host the interpreter (see *Rexx from Java* below); not available yet: Java from Rexx. ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
 suite's native libraries) by a user other than root: **401 of 405** test
 groups pass (`results/suite-jvm-r13346-sockets.csv`). The four failures depend
@@ -131,6 +131,33 @@ does in the browser: queues are then not shared with other processes.
 To stop the daemon, kill the process (`pkill -f orx-wasm-rxapi`); after a
 rebuild, do so, or it goes on running the old jar.
 
+## Rexx from Java (the embedded mode)
+
+A Java program can host the interpreter with `rexxj.jar` on its class path
+(class `rexxjvm.Rexx`; the interpreter's files are looked for beside the
+jar, or in `-Drexxjvm.home`):
+
+```java
+try (Rexx rexx = Rexx.start();
+     Rexx.Interpreter in = rexx.newInterpreter()) {
+    String r = in.callProgram("prog.rex", "a", "b");   // one Rexx argument each
+    String s = in.eval("return 6*7");                    // code run as a routine
+}
+```
+
+Each call runs on the calling Java thread, from any number of threads at
+once; a result is a string (`null`: none), and a condition, normally a
+SYNTAX error, is thrown as `Rexx.RexxException` (code, error text, program,
+line). Several interpreter instances can be open at once, each with its own
+`.local`. The module runs as `rexx --orx-wasm-embedded`, which waits for
+calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
+the calling Java thread, attached to the instance) is in
+[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Chicory's
+frames live on the calling thread's Java stack: give the JVM `-Xss16m` or
+more (`dist/rexxj` does), or deep Rexx recursion fails. This is layer 0 of
+the design, strings only; Java objects, and BSF4ooRexx on top, come next.
+One module per JVM for now. Tests: `tests/embed/`.
+
 ## Contents
 
 | Path | What |
@@ -139,10 +166,10 @@ rebuild, do so, or it goes on running the old jar.
 | `build-test.sh` | Builds `dist-test/`, the variant with the test suite's native libraries. |
 | `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
-| `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`). |
+| `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module. |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`). |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
 | `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |
 | `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |

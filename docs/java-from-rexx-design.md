@@ -4,7 +4,8 @@
 our own, BSF4ooRexx compatibility on top of it, our own API too) was agreed
 with Josep Maria on 02/11/2026; everything below it is a proposal. The two
 hypotheses in "Threads" were checked by a prototype the same day: both
-hold.*
+hold. The embedded mode was built the same day too (see "The embedded mode,
+as built").*
 
 ## The question
 
@@ -168,6 +169,50 @@ memory has no guard page: wasi-libc's default stack overflowed silently),
 and foreign Java threads need a large Java stack (`-Xss`; with Java's
 default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 
+## The embedded mode, as built (02/11/2026)
+
+- **One binary, a command.** `rexx --orx-wasm-embedded` (`rexx.cpp`, in the
+  WASI patch, next to `rxapi`) runs `orxWasiEmbeddedMain`
+  (`compat/orx_wasi_embed.cpp`): it starts the dispatcher thread and waits
+  in the launcher (`embed_main_wait`) until Java closes the module. A
+  reactor build would not have saved anything: a foreign Java thread needs
+  a wasm stack and TLS anyway, so it goes through the dispatcher either
+  way.
+- **A home thread per interpreter instance.** The thread that creates an
+  instance becomes its root activity, bound to that thread for the
+  instance's whole life (`InterpreterInstance::initialize`,
+  `ActivityManager::getRootActivity`); a short-lived pthread would not do,
+  and its `pthread_t` could be reused by a later one. So each instance gets
+  a pthread of its own, on a Java thread of its own, which runs
+  `RexxCreateInterpreter`, waits (`embed_home`) and, when the instance is
+  closed, calls `Terminate`.
+- **Calls.** Each call is a foreign entry, as in the prototype: the
+  dispatcher's `pthread_create` (8 MB wasm stack), handed by `thread-spawn`
+  to the calling Java thread, whose worker calls `embed_run`; from there
+  the Java side calls the export `orx_embed_run` on that thread's
+  `Instance`, which does `AttachThread`, `CallProgram` or `NewRoutine` +
+  `CallRoutine`, and `DetachThread`. The C side is only the dispatcher, a
+  generic worker and four exports; what a request does is decided in Java.
+- **Strings** cross as lists in linear memory (an `int32` count, then a
+  length and the bytes of each; −1: no string), UTF-8 on the Java side. A
+  result is `R` and the string, `N` (none), or `C` and the condition's
+  fields (`DecodeConditionInfo`).
+- **Java API** (`host/.../Rexx.java`): `Rexx.start()`,
+  `rexx.newInterpreter()`, `callProgram(file, args...)`,
+  `eval(code, args...)`, `close()`; conditions as `Rexx.RexxException`.
+  One module per JVM (the launcher's state is static). No
+  `System.exit` and no signals in this mode.
+- **Results** (`tests/embed/`, compiled machine, 2 cores): start-up 0.6 s
+  (the translated module's first `Instance` and the image), then ~1 ms per
+  call from one thread (an `eval`: a routine translated each time), 1.9 ms
+  per call with 8 threads calling at once (one interpreter lock), 4 ms to
+  create, use and close an instance. Pre-created entry threads and cached
+  routines can come later, if they matter.
+- **Not yet:** the dispatcher beside an ordinary `rexx program.rex` (so
+  that Java code that Rexx calls can call back into the program's instance
+  from another thread): it comes with the mini-JNI, when Rexx can call
+  Java at all.
+
 ## Other implications
 
 - **Speed.** Chicory translates the module to JVM bytecode. Each emulated
@@ -187,8 +232,8 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 ## Order of work
 
 1. Prototype the two thread hypotheses (re-entry; a foreign thread through
-   `thread-spawn`).
-2. The embedded mode.
+   `thread-spawn`). Done.
+2. The embedded mode. Done (strings only).
 3. The mini-JNI and the object table, with `BSF()` as the first client.
 4. The rest of BSF4ooRexx, measured with its `testUnits/`.
 5. Layer 2.

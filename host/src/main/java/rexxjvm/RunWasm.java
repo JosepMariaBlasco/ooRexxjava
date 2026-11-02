@@ -39,6 +39,13 @@ public final class RunWasm {
      */
     static final long STACK = Long.getLong("rexxjvm.stack", 256L << 20);
 
+    /**
+     * The embedded mode ({@link Rexx}): the module hosted by a Java program. No
+     * {@code System.exit} from the module's threads, and thread-spawn can hand a new
+     * pthread to the Java thread that asked for it ({@link Rexx#handover}).
+     */
+    static volatile boolean embedded;
+
     public static void main(String[] args) throws Exception {
         Throwable[] failure = new Throwable[1];
         Thread t = new Thread(null, () -> {
@@ -51,19 +58,38 @@ public final class RunWasm {
     }
 
     static void run(String[] args) throws Exception {
-        boolean interp = Boolean.getBoolean("rexxjvm.interp");
-        CompiledModule embedded = interp ? null : embeddedModule();
+        List<String> argv = load(args);
+        Host.installSignals(argv);
+        link(argv);
+        int rc = start();
+        System.out.flush();
+        System.exit(rc);
+    }
+
+    /**
+     * Chooses the module: {@code args[0]} if it is a {@code .wasm} file (or there is no
+     * module translated at build time), else the embedded one. Returns the module's argv.
+     */
+    static List<String> load(String[] args) throws Exception {
+        CompiledModule embeddedModule = Boolean.getBoolean("rexxjvm.interp") ? null : embeddedModule();
         List<String> argv = new ArrayList<>(Arrays.asList(args));
-        if (embedded != null && !(args.length > 0 && args[0].endsWith(".wasm"))) {
-            module = embedded.wasmModule();
+        if (embeddedModule != null && !(args.length > 0 && args[0].endsWith(".wasm"))) {
+            module = embeddedModule.wasmModule();
+            machine = embeddedModule.machineFactory();
             argv.add(0, "rexx");
         } else {
-            embedded = null;
+            if (args.length == 0) throw new IllegalArgumentException("no module: give a .wasm file");
             wasmFile = new File(args[0]).getAbsolutePath();
             module = Parser.parse(new File(args[0]));
+            machine = null;
             argv.set(0, new File(args[0]).getName());
         }
-        Host.installSignals(argv);
+        return argv;
+    }
+
+    /** WASI, the shared memory, thread-spawn and the launcher's imports. */
+    static void link(List<String> argv) {
+        boolean interp = Boolean.getBoolean("rexxjvm.interp");
         WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv)
             .withDirectory("/", Path.of("/"));
         for (Map.Entry<String, String> e : System.getenv().entrySet()) if (!e.getKey().equals("PWD")) ob.withEnvironment(e.getKey(), e.getValue());
@@ -79,16 +105,18 @@ public final class RunWasm {
             List.of(ValType.I32), List.of(ValType.I32), (inst, a) -> {
                 int tid = nextTid.getAndIncrement();
                 int startArg = (int) a[0];
+                if (embedded && Rexx.handover(tid, startArg)) return new long[] { tid };
                 Thread t = new Thread(null, () -> {
                     try {
                         Instance ti = newInstance();
                         ti.export("wasi_thread_start").apply(tid, startArg);
                     } catch (WasiExitException x) {
+                        if (embedded) { Rexx.exited(x.exitCode()); return; }
                         System.out.flush(); System.exit(x.exitCode());
                     } catch (Throwable x) {
                         System.err.println("thread " + tid + ": " + x);
                         x.printStackTrace();
-                        System.exit(70);
+                        if (!embedded) System.exit(70);
                     }
                 }, "wasm-" + tid, STACK);
                 t.setDaemon(true);
@@ -103,21 +131,21 @@ public final class RunWasm {
             .addFunction(RxApi.functions().toArray(new HostFunction[0]))
             .addFunction(FileSys.functions().toArray(new HostFunction[0]))
             .addFunction(Net.functions().toArray(new HostFunction[0]))
+            .addFunction(Rexx.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))
             .build();
-        machine = interp ? null
-                : embedded != null ? embedded.machineFactory()
-                : MachineFactoryCompiler.compile(module);
+        if (machine == null && !interp) machine = MachineFactoryCompiler.compile(module);
+    }
 
-        int rc = 0;
+    /** Runs {@code _start} on the current thread; returns the exit code. */
+    static int start() {
         try {
             Instance main = newInstance();
             main.export("_start").apply();
+            return 0;
         } catch (WasiExitException x) {
-            rc = x.exitCode();
+            return x.exitCode();
         }
-        System.out.flush();
-        System.exit(rc);
     }
 
     /** The module translated at build time, if this jar carries one. */
