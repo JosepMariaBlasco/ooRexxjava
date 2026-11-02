@@ -37,9 +37,10 @@ RXJ_IMPORT(embed_run)       void rxj_embed_run(int id);
 RXJ_IMPORT(embed_home)      void rxj_embed_home(int id, int instance);
 }
 
-/* linear memory has no guard page: every thread we create gets an explicit, generous
-   stack (an overflow would otherwise corrupt memory silently) */
-#define WORKER_STACK (8 << 20)
+/* linear memory has no guard page: every thread we create gets an explicit stack, the
+   size of the interpreter's other threads (orx_wasi_host.c, orxWasiThreadStack); Rexx
+   recursion is checked against it (error 11) */
+extern "C" size_t orxWasiThreadStack(void);
 
 static void *worker(void *arg)
 {
@@ -59,7 +60,7 @@ static void *dispatcher(void *unused)
         }
         pthread_attr_t attr;
         pthread_attr_init(&attr);
-        pthread_attr_setstacksize(&attr, WORKER_STACK);
+        pthread_attr_setstacksize(&attr, orxWasiThreadStack());
         pthread_t t;
         int rc = pthread_create(&t, &attr, worker, (void *)(intptr_t)id);
         pthread_attr_destroy(&attr);

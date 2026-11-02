@@ -146,3 +146,53 @@ void orxWasiStartSignals(void)
         pthread_detach(t);
     }
 }
+
+/* The C stack of the threads the interpreter creates (activities: START,
+   REPLY, early reply of a method) and of the threads that run Rexx for Java
+   (orx_wasi_embed.cpp's workers). Natively a new activity gets the stack size
+   of the thread that creates it, 8 MB here (-z stack-size), which Linux only
+   reserves; under WASI pthread_create takes it with malloc from the linear
+   memory, and Chicory backs every page of it with Java heap as soon as the
+   memory grows: 8 MB per live thread, and at most ~240 threads in the 2 GB
+   the module may have. A Rexx call level takes ~80 bytes of this stack under
+   WASI (~370 natively: Chicory's frames are on the Java stack), so 256 KB
+   gives a thread ~2,600 levels of Rexx recursion (natively ~22,500 with
+   8 MB) and room for ~8,000 live threads (BSF4ooRexx's rgf_multithreading
+   has 2,601 live at once: with 512 KB they exhaust Java's default heap).
+   Rexx recursion is checked against the stack (Activity::checkStackSpace,
+   error 11), so running out of it is an ordinary error. REXXJVM_THREADSTACK overrides the default: bytes, or
+   with a K or M suffix (1M, 2M); at least 128K, at most 256M (the
+   launcher sets it from -Drexxjvm.threadstack, RunWasm.java). The main
+   thread keeps its 8 MB. */
+#include <stdlib.h>
+#define ORX_WASI_THREAD_STACK_DEFAULT (256 * 1024)
+#define ORX_WASI_THREAD_STACK_MIN     (128 * 1024)
+
+size_t orxWasiThreadStack(void)
+{
+    static size_t size = 0;
+    if (size == 0)
+    {
+        size_t s = ORX_WASI_THREAD_STACK_DEFAULT;
+        const char *e = getenv("REXXJVM_THREADSTACK");
+        if (e != NULL && *e != '\0')
+        {
+            char *end;
+            unsigned long v = strtoul(e, &end, 10);
+            if (*end == 'k' || *end == 'K')
+            {
+                v *= 1024; end++;
+            }
+            else if (*end == 'm' || *end == 'M')
+            {
+                v *= 1024 * 1024; end++;
+            }
+            if (*end == '\0' && v > 0 && v <= 256UL * 1024 * 1024)
+            {
+                s = v < ORX_WASI_THREAD_STACK_MIN ? ORX_WASI_THREAD_STACK_MIN : (size_t)v;
+            }
+        }
+        size = (s + 15) & ~(size_t)15;
+    }
+    return size;
+}

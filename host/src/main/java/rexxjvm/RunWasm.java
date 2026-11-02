@@ -94,6 +94,10 @@ public final class RunWasm {
             .withDirectory("/", Path.of("/"));
         for (Map.Entry<String, String> e : System.getenv().entrySet()) if (!e.getKey().equals("PWD")) ob.withEnvironment(e.getKey(), e.getValue());
         ob.withEnvironment("PWD", System.getProperty("user.dir"));
+        // the C stack of the threads the interpreter creates (compat/orx_wasi_host.c,
+        // orxWasiThreadStack): -Drexxjvm.threadstack=1M, else REXXJVM_THREADSTACK
+        String threadStack = System.getProperty("rexxjvm.threadstack");
+        if (threadStack != null) ob.withEnvironment("REXXJVM_THREADSTACK", threadStack);
         WasiPreview1 wasi = WasiPreview1.builder().withOptions(ob.build()).build();
 
         // the shared memory the module imports (wasi-threads modules import "env" "memory")

@@ -187,12 +187,34 @@ mini-JNI: `jobject`, `jclass`, `jmethodID` are handles of an object table
 kept by the launcher; each `JNIEnv` function is a call to the launcher,
 about 0.5 µs), and `rexxj.jar` doubles as a Java agent that sends
 BSF4ooRexx's `native` methods to the module. BSF4ooRexx's own tests pass
-(`rgf`, `lex`, `java6`, `java8`), except its multithreading stress test: each
-Rexx thread costs about 13 MB of Java heap, and that test creates thousands.
+(`rgf`, `lex`, `java6`, `java8`, and `rgf_multithreading`, up to 10,201
+threads).
 Design and limits in [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md);
 tests in `tests/bsf/` and `tests/jni/`. A Java program that hosts the
 interpreter (`rexxjvm.Rexx`) and uses BSF4ooRexx needs `-javaagent:rexxj.jar`
 too.
+
+## Threads and their stacks
+
+Every Rexx thread (`START`, `REPLY`, a Java thread calling Rexx) is a wasm
+thread: a Java thread of its own, with a C stack taken from the module's
+linear memory, which is all Java heap. The main thread has 8 MB; the others
+**256 KB** by default, enough for about 2,600 levels of Rexx recursion
+(natively, with 8 MB, about 22,500) and for about 8,000 live threads (512 KB
+would exhaust Java's default heap with the 2,601 threads of BSF4ooRexx's
+stress test).
+Recursion deeper than the stack ends in error 11, as natively. To change it,
+`REXXJVM_THREADSTACK` in the environment, or `-Drexxjvm.threadstack` for a
+Java host (bytes, or with `K` or `M`: `2M` gives about 25,000 levels;
+from 128K to 256M):
+
+```bash
+REXXJVM_THREADSTACK=2M rexxj deep.rex
+```
+
+Why, and the measurements, in
+[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md) ("Memory
+per thread").
 
 ## Contents
 

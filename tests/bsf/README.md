@@ -31,19 +31,27 @@ cd /path/to/oorexx-test      # ooRexx's test/trunk
 env -u JAVA_TOOL_OPTIONS rexx testOORexx.rex -R /path/to/testUnits/bsf4rexx/rgf -s
 ```
 
-Results (02/11/2026, Java 21, 2 cores):
+Results (02/11/2026, Java 21, 2 cores, threads' C stack 256 KB):
 
 | Group | Tests | Assertions | Failures | Errors |
 |---|---|---|---|---|
 | `rgf` | 172 | 268,038 | 0 | 0 |
 | `lex` | 771 | 886 | 0 | 0 |
-| `java8` | 39 | | 0 | 0 |
-| `java6` | 25 | | 0 | 0 |
+| `java8` | 39 | 1,500 | 0 | 0 |
+| `java6` | 25 | 1,265 | 0 | 0 |
+| `rgf_multithreading` | 6 | 1,557 | 0 | 0 |
 
-`java9` has no test groups. `rgf_multithreading` does not finish: its
-stress cases create 712, 2,601 and 10,201 threads, and each wasm thread costs
-about 13 MB of Java heap (an `Instance` of the module per thread); with Java's
-default heap (1.5 GB here) it runs out of memory at about a hundred threads.
+`java9` has no test groups. `rgf_multithreading`'s group 80 runs 712
+threads; its source has two heavier cases commented out, 2,601 and 10,201
+threads (`nrJavaThreads`, `nrRexxThreads` = 50 or 100 in a copy of the
+group). 2,601 passes (5,101 assertions, 7 s). Before the threads' C stack
+went down from 8 MB to 256 KB (`README.md`, "Threads and their stacks") it
+ran out of Java heap and hung; with 512 KB it still ran out (2,601 threads
+alive at once, 1.5 GB of default heap here). 10,201 passed three runs of
+four (20,201 assertions, 13 s); in the fourth more threads were alive at
+once, the heap ran out (each thread also has its `Instance` of the module)
+and the run hung.
+
 With `testUnits/ooRexxUnit`'s own framework the counts are the same apart from
 16 errors (`assertSameList`) and 30 in `lex` (its procedural groups, run first,
 unregister beans that `BSF.CLS` keeps cached; not seen with ooRexx's

@@ -188,7 +188,8 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   `RexxCreateInterpreter`, waits (`embed_home`) and, when the instance is
   closed, calls `Terminate`.
 - **Calls.** Each call is a foreign entry, as in the prototype: the
-  dispatcher's `pthread_create` (8 MB wasm stack), handed by `thread-spawn`
+  dispatcher's `pthread_create` (the threads' wasm stack, 256 KB by default:
+  see "Memory per thread" below), handed by `thread-spawn`
   to the calling Java thread, whose worker calls `embed_run`; from there
   the Java side calls the export `orx_embed_run` on that thread's
   `Instance`, which does `AttachThread`, `CallProgram` or `NewRoutine` +
@@ -306,13 +307,32 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   Java threads calling Rexx): all pass. BSF4ooRexx's own `testUnits`, with
   ooRexx's test framework: `rgf` 172 tests (268,038 assertions), `lex` 771,
   `java8` 39, `java6` 25, no failures and no errors.
-- **The limit found: memory per thread.** `testUnits/rgf_multithreading`
-  creates up to 10,201 threads. Each wasm thread is a Java thread with an
-  `Instance` of the whole module, about 13 MB of Java heap: with the default
-  heap (1.5 GB here) it runs out at about a hundred live threads. Not a
-  matter of BSF4ooRexx: any Rexx program with many threads at once meets it.
-  To look at: what an `Instance` holds that could be shared between the
-  threads of one module.
+- **Memory per thread (found with `rgf_multithreading`, solved 02/11/2026).**
+  That test's stress cases create 712, 2,601 and 10,201 threads; at first
+  2,601 ran out of Java heap and hung. The cost was not the `Instance` per
+  thread (a few hundred KB) but each thread's C stack. The module is
+  linked with `-z stack-size=8388608`, and natively a new activity gets the
+  stack size of the thread that creates it, so every Rexx thread took 8 MB.
+  Under WASI `pthread_create` takes that stack with `malloc` from the linear
+  memory, and Chicory's `ByteArrayMemory` allocates a `byte[65536]` of Java
+  heap for every page as soon as the memory grows, touched or not. So 8 MB of
+  heap per live thread, and at most about 240 threads in the module's 2 GB.
+  A Rexx call level takes only about 80 bytes of that stack under WASI
+  (about 370 natively), because Chicory's frames are on the Java stack.
+  Now the activities' threads and the dispatcher's workers get
+  `orxWasiThreadStack()` (`compat/orx_wasi_host.c`, the WASI patch's
+  `SysActivity::create`): 256 KB by default, `REXXJVM_THREADSTACK` or
+  `-Drexxjvm.threadstack` (bytes, or `1M`, `2M`; 128K to 256M). The main
+  thread keeps 8 MB. Measured: with 200 live threads, 78 MB of wasm memory
+  instead of about 1.6 GB (28 MB of it fixed; 128 MB with 512K); in a
+  thread, 2,661 levels of Rexx recursion (5,938 with 512K, 104,242 with
+  8 MB; natively 22,525), then error 11 as usual; at most about 8,000 live
+  threads. 512K was tried as the default first: the 2,601 threads of
+  `rgf_multithreading`, nearly all alive at once, then exhaust Java's
+  default heap (1.5 GB here). A memory that allocates its pages when first
+  touched (a `Memory` of our own for Chicory) would make large stacks cost
+  only what they use (`todo`). All of
+  `rgf_multithreading`'s cases pass (`tests/bsf/README.md`).
 
 ## Other implications
 
@@ -336,7 +356,7 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
    `thread-spawn`). Done.
 2. The embedded mode. Done (strings only).
 3. The mini-JNI and the object table. Done.
-4. BSF4ooRexx, measured with its `testUnits/`. Done, unchanged, apart from
-   `rgf_multithreading` (memory per thread); JSR-223 (`RexxScriptEngine`,
-   Java hosting Rexx through BSF4ooRexx) not tried yet.
+4. BSF4ooRexx, measured with its `testUnits/`. Done, unchanged; all of
+   them pass since the threads' smaller C stack (memory per thread); JSR-223
+   (`RexxScriptEngine`, Java hosting Rexx through BSF4ooRexx) not tried yet.
 5. Layer 2.
