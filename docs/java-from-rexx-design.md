@@ -361,9 +361,9 @@ and the wake-ups owed to them, per address). Wasm is little-endian: values
 are byte-swapped on a big-endian machine. `-Drexxjvm.memory=bytearray` goes
 back to `ByteArrayMemory`.
 
-Measured (2 cores, Java 21, with `-XX:-DontCompileHugeMethods`): `rexxcps`
-1.19–1.23 M clauses/s, against 0.99–1.05 M with `ByteArrayMemory` (runs
-alternated). 200 live threads with 8 MB stacks: 245 MB of resident memory in
+Measured (2 cores, Java 21, with `-XX:-DontCompileHugeMethods`, README
+"Speed"): `rexxcps` 1.19–1.23 M clauses/s, against 0.99–1.05 M with
+`ByteArrayMemory` (runs alternated). 200 live threads with 8 MB stacks: 245 MB of resident memory in
 all, where `ByteArrayMemory` reached 1.6 GB and failed; with 256 KB stacks,
 250 MB against 313 MB.
 

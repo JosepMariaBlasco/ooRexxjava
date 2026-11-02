@@ -97,10 +97,9 @@ cp "$HERE/host/target/rexxj.jar" dist/
 # Chicory's frames live on their Java stack (prototypes/threads/README.md)
 # -cp, not -jar: Java code that Rexx uses is found through CLASSPATH, as with BSF4ooRexx;
 # the jar is also the agent that gives BSF4ooRexx's native methods to the module (Natives)
-# -XX:-DontCompileHugeMethods: HotSpot never JIT-compiles a method over 8,000 bytes of
-# bytecode, and some of the interpreter's functions become such methods; rexxcps
-# 560 k -> 997 k clauses/s with it (02/11/2026)
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m -XX:-DontCompileHugeMethods -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
+# $REXXJ_JAVA_OPTIONS: more options for the JVM, e.g. -XX:-DontCompileHugeMethods for long
+# runs (README.md, "Speed")
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
 # the usual names, as commands (the test suite runs "rexx ..."): rexx is rexxj; the
 # utilities are in the interpreter's binary (multi-call, rexx --orx-wasm-TOOL)

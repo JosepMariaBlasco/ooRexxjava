@@ -168,11 +168,8 @@ calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
 the calling Java thread, attached to the instance) is in
 [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Chicory's
 frames live on the calling thread's Java stack: give the JVM `-Xss16m` or
-more (`dist/rexxj` does), or deep Rexx recursion fails. Give it also
-`-XX:-DontCompileHugeMethods` (`dist/rexxj` does): HotSpot never JIT-compiles
-a method over 8,000 bytes of bytecode, some of the interpreter's functions
-become such methods, and the interpreter runs about 1.8 times faster with it
-(`rexxcps`). Strings only: Java objects cross through BSF4ooRexx (below).
+more (`dist/rexxj` does), or deep Rexx recursion fails. For long runs,
+`-XX:-DontCompileHugeMethods` too (README, "Speed"). Strings only: Java objects cross through BSF4ooRexx (below).
 One module per JVM for now. Tests: `tests/embed/`.
 
 ## Java from Rexx: BSF4ooRexx
@@ -206,7 +203,7 @@ too.
 The other direction works as well: a Java program can run Rexx through
 JSR-223 (`javax.script`), with BSF4ooRexx's own script engine, without naming
 any class of ours. It needs `rexxj.jar` as a Java agent and on the class path,
-`bsf4oorexx.jar` on the class path, `-Xss16m` and `-XX:-DontCompileHugeMethods`; the module starts by itself
+`bsf4oorexx.jar` on the class path, and `-Xss16m`; the module starts by itself
 the first time BSF4ooRexx needs it, and finds `BSF.CLS` beside `rexx.img`.
 
 ```java
@@ -215,11 +212,27 @@ Object r = rexx.eval("return reverse('hi!')");    // "!ih"
 ```
 
 ```bash
-java -Xss16m -XX:-DontCompileHugeMethods -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. MyHost
+java -Xss16m -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. MyHost
 ```
 
 Test and its notes in `tests/jsr223/` (about 20 ms per `invokeFunction` for
 now, 1 ms natively: mostly the interpreter's speed).
+
+## Speed
+
+Chicory translates the module to JVM bytecode, one method per wasm function,
+and HotSpot never JIT-compiles a method over 8,000 bytes of bytecode: some of
+the interpreter's functions become such methods and run interpreted by the JVM
+for ever. `-XX:-DontCompileHugeMethods` lifts that limit: `rexxcps` goes from
+about 0.56 to 1.0 M clauses/s (1.2 M with `FlatMemory`). It is not on by
+default, because compiling those methods makes start-up slower (some tests of
+ooRexx's suite give a server 0.5 s to start, and then fail); for long runs:
+
+```bash
+REXXJ_JAVA_OPTIONS=-XX:-DontCompileHugeMethods rexxj program.rex
+```
+
+Natively, ooRexx runs `rexxcps` at 9.7–10.7 M clauses/s on the same machine.
 
 ## Threads and their stacks
 
