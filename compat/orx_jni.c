@@ -515,7 +515,9 @@ static const struct JNINativeInterface_ jni_functions = {
 
 static const struct JNINativeInterface_ *const jni_env_storage = &jni_functions;
 
-/** The JNIEnv: the same for every thread. */
+/** The JNIEnv: the same for every thread. Exported: the launcher passes it to native
+    methods implemented in the module (layer 1, host/.../Natives.java). */
+__attribute__((export_name("orx_jni_env")))
 JNIEnv *orx_jni_env(void)
 {
     return (JNIEnv *)&jni_env_storage;
@@ -574,7 +576,9 @@ static jint JNICALL GetJavaVM(JNIEnv *env, JavaVM **vm)
 }
 
 /* The invocation API: there is exactly one JVM, the one that runs the module, and it
-   cannot be created or destroyed from here. */
+   cannot be destroyed from here. "Creating" one gives that JVM, with the calling thread
+   attached, as if it had just been created: what C code that loads a JVM (BSF4ooRexx's
+   BsfLoadJava) needs. */
 jint JNICALL JNI_GetDefaultJavaVMInitArgs(void *args)
 {
     (void)args;
@@ -588,10 +592,14 @@ jint JNICALL JNI_GetCreatedJavaVMs(JavaVM **vms, jsize size, jsize *count)
     return JNI_OK;
 }
 
+int orxWasiStartDispatcher(void);   /* compat/orx_wasi_embed.cpp */
+
 jint JNICALL JNI_CreateJavaVM(JavaVM **pvm, void **penv, void *args)
 {
     (void)args;
+    /* Java may now call native methods implemented in the module from any of its
+       threads: those that are not wasm threads enter through the dispatcher */
+    orxWasiStartDispatcher();
     *pvm = orx_jni_vm();
-    *penv = NULL;
-    return JNI_EEXIST;
+    return AttachCurrentThread(*pvm, penv, NULL);
 }

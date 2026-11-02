@@ -5,7 +5,8 @@ our own, BSF4ooRexx compatibility on top of it, our own API too) was agreed
 with Josep Maria on 02/11/2026; everything below it is a proposal. The two
 hypotheses in "Threads" were checked by a prototype the same day: both
 hold. The embedded mode was built the same day too (see "The embedded mode,
-as built"), and the mini-JNI after it (see "The mini-JNI, as built").*
+as built"), then the mini-JNI (see "The mini-JNI, as built") and BSF4ooRexx
+on top of it (see "BSF4ooRexx on the mini-JNI, as built").*
 
 ## The question
 
@@ -208,10 +209,9 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   per call with 8 threads calling at once (one interpreter lock), 4 ms to
   create, use and close an instance. Pre-created entry threads and cached
   routines can come later, if they matter.
-- **Not yet:** the dispatcher beside an ordinary `rexx program.rex` (so
-  that Java code that Rexx calls can call back into the program's instance
-  from another thread): it comes with the mini-JNI, when Rexx can call
-  Java at all.
+- **Beside an ordinary program** too, since BSF4ooRexx: the dispatcher is
+  started when C code asks for the JVM (see "BSF4ooRexx on the mini-JNI, as
+  built").
 
 ## The mini-JNI, as built (02/11/2026)
 
@@ -221,8 +221,9 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   is `long long`). C code written against JNI compiles unchanged. Each
   function calls one import of the module `jni` (`host/.../Jni.java`, 38
   functions). `orx_jni_env()` and `orx_jni_vm()` give the `JNIEnv` and the
-  `JavaVM`; `JNI_GetCreatedJavaVMs` returns the one JVM, `JNI_CreateJavaVM`
-  says `JNI_EEXIST`.
+  `JavaVM`; `JNI_GetCreatedJavaVMs` returns the one JVM, and
+  `JNI_CreateJavaVM` gives it too, with the thread attached, as if it had just
+  been created (what BSF4ooRexx's `BsfLoadJava` needs).
 - **Handles.** A `jobject` is an index into the launcher's object table, cast
   to a pointer; `NULL` is null. Local, global and weak global references as in
   JNI. Local references belong to the thread's current frame: a frame is
@@ -253,9 +254,7 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   are a reentrant lock per object, which does not exclude Java code
   `synchronized` on the same object (nothing in `BSF4ooRexx.cc` uses them).
 - **Test** (`tests/jni/`, a tool of `dist-test`): 100 checks, all pass; 0.5 µs
-  per `CallIntMethod`; 8 threads at once. `dist/rexx.wasm` does not contain
-  it yet: nothing in the interpreter calls it, so the linker leaves it out
-  until layer 1 does.
+  per `CallIntMethod`; 8 threads at once.
 - **`rexxj` honours `CLASSPATH`** (`-cp` instead of `-jar`): `FindClass` uses
   the thread's context class loader, the application's.
 
@@ -266,6 +265,54 @@ of an initialized BSF4ooRexx; that object is made by Java (`Java4Rexx`,
 (`jniSetupNativeJVMPointer`, `jniInitialize4Rexx`...). So `BSF()` as the
 first client already needs part of layer 1: `BSF4ooRexx.cc` compiled into the
 module, and the start-up `native` methods redirected to it.
+
+## BSF4ooRexx on the mini-JNI, as built (02/11/2026)
+
+BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
+
+- **The native library, untouched.** `BSF4ooRexx.cc` (branch 850, commit
+  `eafe4e6` of the Git import) compiles for wasm32 against the mini-JNI
+  without a single change. The only thing it lacked was `dlopen` / `dlsym`,
+  with which `BsfLoadJava` loads `libjvm.so` and finds `JNI_CreateJavaVM`: it
+  is compiled with `-Ddlopen=orx_bsf_dlopen ...`, and `compat/orx_bsf.c`'s
+  versions give the mini-JNI's functions for any library whose name contains
+  "jvm". The library is in oorexxwasm's table of linked libraries
+  (`orx_wasm_static_libraries`, now in `orx_bsf.c`: BSF4ooRexx under both
+  names `BSF.CLS` uses, `BSF4ooRexx850` and `BSF4ooRexx`, then whatever a
+  build adds, `orx_wasi_extra_libraries`: `build-test.sh`'s test libraries).
+  Its 50 `Java_...` functions are exported from the module.
+- **The Java side, unchanged, with its `native` methods redirected.**
+  `rexxj.jar` is also a Java agent (`-javaagent:rexxj.jar`, `rexxjvm.Natives`):
+  as the classes of `org/rexxla/bsf/` (`-Drexxjvm.natives`) are loaded, ASM
+  (which Chicory's compiler already brings) gives each `native` method a body
+  that calls the module's `Java_...` function, and makes their
+  `System.loadLibrary` do nothing. The jar on disk is not changed. A call
+  pushes a frame of local references and counts as attached, and an exception
+  the C code leaves pending is thrown when it returns, as in JNI.
+  `dist/bsf4oorexx.jar` is `bsf4oorexx.dev/source_java` compiled for Java 8
+  over the repository's Apache BSF and Janino classes (the classes compiled at
+  the repository's root are older: `RexxRedirectingCommandHandler` is
+  missing).
+- **Threads.** A native method called on a thread that is running wasm code
+  (Rexx calls Java, which calls back: a `Comparator` written in Rexx) runs on
+  that thread's `Instance` (`RunWasm.current`). Called on any other Java
+  thread (a `java.lang.Thread`, Swing's), it is a foreign entry, as in the
+  embedded mode: the dispatcher, which `JNI_CreateJavaVM` now starts beside
+  an ordinary program (`orxWasiStartDispatcher`), creates a pthread and
+  `thread-spawn` hands it to that Java thread, which runs the call itself. So
+  Rexx code called from a Java thread runs on that very thread.
+- **Results.** `tests/bsf/` (objects, static fields, collections, arrays,
+  exceptions as SYNTAX conditions, a Rexx comparator called by Java, four
+  Java threads calling Rexx): all pass. BSF4ooRexx's own `testUnits`, with
+  ooRexx's test framework: `rgf` 172 tests (268,038 assertions), `lex` 771,
+  `java8` 39, `java6` 25, no failures and no errors.
+- **The limit found: memory per thread.** `testUnits/rgf_multithreading`
+  creates up to 10,201 threads. Each wasm thread is a Java thread with an
+  `Instance` of the whole module, about 13 MB of Java heap: with the default
+  heap (1.5 GB here) it runs out at about a hundred live threads. Not a
+  matter of BSF4ooRexx: any Rexx program with many threads at once meets it.
+  To look at: what an `Instance` holds that could be shared between the
+  threads of one module.
 
 ## Other implications
 
@@ -288,7 +335,8 @@ module, and the start-up `native` methods redirected to it.
 1. Prototype the two thread hypotheses (re-entry; a foreign thread through
    `thread-spawn`). Done.
 2. The embedded mode. Done (strings only).
-3. The mini-JNI and the object table. Done (phase A). Then `BSF()` as the
-   first client (phase B), which already needs part of layer 1 (above).
-4. The rest of BSF4ooRexx, measured with its `testUnits/`.
+3. The mini-JNI and the object table. Done.
+4. BSF4ooRexx, measured with its `testUnits/`. Done, unchanged, apart from
+   `rgf_multithreading` (memory per thread); JSR-223 (`RexxScriptEngine`,
+   Java hosting Rexx through BSF4ooRexx) not tried yet.
 5. Layer 2.

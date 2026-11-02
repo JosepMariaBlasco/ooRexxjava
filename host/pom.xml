@@ -9,12 +9,15 @@
   <dependencies>
     <dependency><groupId>com.dylibso.chicory</groupId><artifactId>runtime</artifactId><version>${chicory.version}</version></dependency>
     <dependency><groupId>com.dylibso.chicory</groupId><artifactId>wasi</artifactId><version>${chicory.version}</version></dependency>
+    <!-- the compiler brings ASM, which rexxjvm.Natives uses too -->
     <dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.version}</version></dependency>
   </dependencies>
   <build><plugins>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId><version>3.6.0</version>
       <executions><execution><phase>package</phase><goals><goal>shade</goal></goals>
-        <configuration><transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"><mainClass>rexxjvm.RunWasm</mainClass></transformer></transformers></configuration>
+        <configuration><transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"><mainClass>rexxjvm.RunWasm</mainClass>
+          <!-- the jar is also a Java agent (-javaagent:rexxj.jar): native methods implemented in the module, rexxjvm.Natives -->
+          <manifestEntries><Premain-Class>rexxjvm.Natives</Premain-Class><Agent-Class>rexxjvm.Natives</Agent-Class></manifestEntries></transformer></transformers></configuration>
       </execution></executions></plugin>
   </plugins></build>
   <!-- mvn package -Pembedded -Dwasm.file=/path/to/rexx.wasm: rexx.wasm translated to

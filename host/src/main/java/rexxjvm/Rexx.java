@@ -247,9 +247,18 @@ public final class Rexx implements AutoCloseable {
     }
 
     /** Runs work inside the module, on the calling Java thread, in a pthread of its own. */
-    @SuppressWarnings("unchecked")
     <T> T enter(Work<T> work) {
         if (closed) throw new IllegalStateException("closed");
+        return foreign(work);
+    }
+
+    /**
+     * Runs work inside the module on the calling Java thread, which is not a wasm
+     * thread: a foreign entry through the dispatcher, which must be running (the
+     * embedded mode, or orxWasiStartDispatcher beside an ordinary program).
+     */
+    @SuppressWarnings("unchecked")
+    static <T> T foreign(Work<T> work) {
         Request r = new Request(Thread.currentThread(), work);
         submit(r);
         int[] ts;
@@ -260,7 +269,7 @@ public final class Rexx implements AutoCloseable {
             throw new IllegalStateException("interrupted while entering the module", x);
         }
         try {
-            if (ts[0] >= 0) RunWasm.newInstance().export("wasi_thread_start").apply(ts[0], ts[1]);
+            if (ts[0] >= 0) RunWasm.runOn("wasi_thread_start", ts[0], ts[1]);
         } finally {
             pending.remove(r.id);
         }

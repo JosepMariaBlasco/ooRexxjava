@@ -132,17 +132,26 @@ final class Jni {
 
     static ThreadState state() { return STATE.get(); }
 
-    /** Pushes a frame for a call from Java into the module (layer 1); returns its depth. */
-    static int pushFrame() {
+    /**
+     * A native method is called ({@link Natives}): a frame for its local references, and
+     * the thread counts as attached (GetEnv says JNI_OK) while it runs. Returns the depth
+     * to give {@link #exitNative}.
+     */
+    static int enterNative() {
         ThreadState s = state();
+        s.attached++;
         s.frames.push(new Frame());
         return s.frames.size();
     }
 
-    /** Pops frames down to (and including) the one {@link #pushFrame} returned. */
-    static void popFrame(int depth) {
+    /** The native method returned: its frames are popped; returns (and clears) the exception it left pending. */
+    static Throwable exitNative(int depth) {
         ThreadState s = state();
         while (s.frames.size() >= depth && s.frames.size() > 1) s.frames.pop().pop();
+        if (s.attached > 0) s.attached--;
+        Throwable t = s.pending;
+        s.pending = null;
+        return t;
     }
 
     private static int fail(Throwable x) {

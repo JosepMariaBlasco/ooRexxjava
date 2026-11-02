@@ -105,11 +105,10 @@ public final class RunWasm {
             List.of(ValType.I32), List.of(ValType.I32), (inst, a) -> {
                 int tid = nextTid.getAndIncrement();
                 int startArg = (int) a[0];
-                if (embedded && Rexx.handover(tid, startArg)) return new long[] { tid };
+                if (Rexx.handover(tid, startArg)) return new long[] { tid };
                 Thread t = new Thread(null, () -> {
                     try {
-                        Instance ti = newInstance();
-                        ti.export("wasi_thread_start").apply(tid, startArg);
+                        runOn("wasi_thread_start", tid, startArg);
                     } catch (WasiExitException x) {
                         if (embedded) { Rexx.exited(x.exitCode()); return; }
                         System.out.flush(); System.exit(x.exitCode());
@@ -141,8 +140,7 @@ public final class RunWasm {
     /** Runs {@code _start} on the current thread; returns the exit code. */
     static int start() {
         try {
-            Instance main = newInstance();
-            main.export("_start").apply();
+            runOn("_start");
             return 0;
         } catch (WasiExitException x) {
             return x.exitCode();
@@ -157,6 +155,24 @@ public final class RunWasm {
             return null;
         } catch (ReflectiveOperationException x) {
             throw new IllegalStateException(x);
+        }
+    }
+
+    /**
+     * The Instance through which the current Java thread runs wasm code, if it does: a
+     * native method called on it (layer 1, {@link Natives}) re-enters the module there.
+     */
+    static final ThreadLocal<Instance> current = new ThreadLocal<>();
+
+    /** Runs an export on a new Instance for the current thread (a wasm thread's entry point). */
+    static long[] runOn(String export, long... args) {
+        Instance prev = current.get();
+        Instance inst = newInstance();
+        current.set(inst);
+        try {
+            return inst.export(export).apply(args);
+        } finally {
+            if (prev == null) current.remove(); else current.set(prev);
         }
     }
 

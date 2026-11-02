@@ -76,17 +76,36 @@ static void *dispatcher(void *unused)
     return NULL;
 }
 
+static pthread_t dispatcherThread;
+static int dispatcherStarted;
+static pthread_once_t dispatcherOnce = PTHREAD_ONCE_INIT;
+
+static void startDispatcher(void)
+{
+    dispatcherStarted = pthread_create(&dispatcherThread, NULL, dispatcher, NULL) == 0;
+}
+
+/* Starts the dispatcher once; returns whether it runs. Also beside an ordinary
+   program: Java threads that are not wasm threads (a Swing listener, a pool's thread)
+   enter the module through it to run native methods implemented here (layer 1, Java
+   code that calls back into Rexx: host/.../Natives.java). The mini-JNI starts it when
+   C code asks for the JVM (compat/orx_jni.c, JNI_CreateJavaVM). */
+extern "C" int orxWasiStartDispatcher(void)
+{
+    pthread_once(&dispatcherOnce, startDispatcher);
+    return dispatcherStarted;
+}
+
 /* rexx --orx-wasm-embedded (rexx.cpp) */
 extern "C" int orxWasiEmbeddedMain(void)
 {
-    pthread_t d;
-    if (pthread_create(&d, NULL, dispatcher, NULL) != 0)
+    if (!orxWasiStartDispatcher())
     {
         fprintf(stderr, "rexx embedded: no dispatcher thread\n");
         return 70;
     }
     rxj_embed_main_wait();
-    pthread_join(d, NULL);
+    pthread_join(dispatcherThread, NULL);
     return 0;
 }
 

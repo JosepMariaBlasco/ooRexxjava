@@ -104,13 +104,14 @@ for unit in $UNITS; do
   tables+=("$lib:$table")
 done
 
-# the table SysLibrary looks up
+# the libraries a build adds to the table SysLibrary looks up (compat/orx_bsf.c's
+# orx_wasm_static_libraries puts BSF4ooRexx first)
 {
   echo 'extern "C" {'
   echo "typedef struct { const char *name; void *address; } OrxWasmStaticSymbol;"
   echo "typedef struct { const char *name; const OrxWasmStaticSymbol *symbols; } OrxWasmStaticLibrary;"
   for t in "${tables[@]}"; do echo "extern const OrxWasmStaticSymbol ${t#*:}[];"; done
-  echo "const OrxWasmStaticLibrary *orx_wasm_static_libraries(void)"
+  echo "const OrxWasmStaticLibrary *orx_wasi_extra_libraries(void)"
   echo "{"
   echo "    static const OrxWasmStaticLibrary libraries[] = {"
   for t in "${tables[@]}"; do echo "        { \"${t%%:*}\", ${t#*:} },"; done
