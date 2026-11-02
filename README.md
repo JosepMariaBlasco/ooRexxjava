@@ -29,6 +29,8 @@ on timing and pass when run again: `RexxContext`, `TRACE`,
 `TRACE_TraceObject`, and `MutexSemaphore`, whose `test_exclusion` can leave a
 thread waiting for ever when the main thread wins the last acquisition (the
 test's race; it shows here because threads are scheduled more slowly).
+After the embedded mode (`suite-jvm-r13346-embedded.csv`): 404 of 405, only
+`TRACE` failing.
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
