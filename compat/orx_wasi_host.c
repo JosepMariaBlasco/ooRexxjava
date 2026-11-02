@@ -44,6 +44,8 @@ RXJ_IMPORT(api_close)
 void rxj_api_close(int handle);
 RXJ_IMPORT(api_start_server)
 int rxj_api_start_server(void);
+RXJ_IMPORT(signal_wait)
+int rxj_signal_wait(void);
 
 int orxWasmCommandRun(char **argv, char **envp, const char *cwd,
                       const char *input, int inputLength, int flags)
@@ -104,3 +106,43 @@ long orxWasiApiWrite(int handle, const void *buf, size_t size)
 }
 void orxWasiApiClose(int handle) { rxj_api_close(handle); }
 int orxWasiApiStartServer(void) { return rxj_api_start_server(); }
+
+/* The host's signals (SystemInterpreter.cpp's hook, called when the
+   interpreter starts): a thread that waits in the launcher for the next
+   SIGINT, SIGTERM or SIGHUP it gets and posts it as natively, with the
+   interpreter's orxWasmSignal() (a HALT in every activity, sleeps ended).
+   Calling the export from a thread of the JVM's own would have no stack or
+   thread-local storage of its own in the module: this is a thread of the
+   program. rxj_signal_wait() returns -1 when the launcher gives no signals
+   (a tool, or a JVM without sun.misc.Signal): the thread ends. */
+#include <pthread.h>
+int orxWasmSignal(int sig);
+
+static void *orx_wasi_signal_thread(void *unused)
+{
+    (void)unused;
+    for (;;)
+    {
+        int sig = rxj_signal_wait();
+        if (sig < 0)
+        {
+            return NULL;
+        }
+        orxWasmSignal(sig);
+    }
+}
+
+void orxWasiStartSignals(void)
+{
+    static int started = 0;
+    if (started)
+    {
+        return;
+    }
+    started = 1;
+    pthread_t t;
+    if (pthread_create(&t, NULL, orx_wasi_signal_thread, NULL) == 0)
+    {
+        pthread_detach(t);
+    }
+}

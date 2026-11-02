@@ -53,7 +53,65 @@ final class Host {
                 (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1],
                                               System.getProperty("rexxjvm.executable")) }),
             new HostFunction("rexxjvm", "library_directory", List.of(ValType.I32, ValType.I32), i32,
-                (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1], libraryDirectory()) }));
+                (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1], libraryDirectory()) }),
+            new HostFunction("rexxjvm", "signal_wait", List.of(), i32, (inst, a) -> new long[] { signalWait() }));
+    }
+
+    /*
+     * The host's signals. SIGINT (Ctrl-C), SIGTERM and SIGHUP become a HALT in the
+     * running program, as natively: the module's signal thread (compat/orx_wasi_host.c)
+     * waits here for them and calls the interpreter's orxWasmSignal(). Until that thread
+     * waits, which is once the interpreter has started, a signal ends the process as
+     * the default action would (128 + its number). Only for rexx itself: the tools
+     * (rexx --orx-wasm-TOOL, the API server's daemon among them) keep the JVM's
+     * default. Through sun.misc.Signal (jdk.unsupported), by reflection; without it,
+     * there are no signals for the program, and the JVM's default stays.
+     */
+    static final java.util.concurrent.LinkedBlockingQueue<Integer> signals =
+        new java.util.concurrent.LinkedBlockingQueue<>();
+    static volatile boolean signalsWanted, signalWaiting;
+
+    static void installSignals(List<String> argv) {
+        if (argv.size() > 1 && argv.get(1).startsWith("--orx-wasm-")) return;
+        try {
+            Class<?> signal = Class.forName("sun.misc.Signal");
+            Class<?> handlerType = Class.forName("sun.misc.SignalHandler");
+            Object handler = java.lang.reflect.Proxy.newProxyInstance(Host.class.getClassLoader(),
+                new Class<?>[] { handlerType }, (proxy, method, args) -> {
+                    if (!method.getName().equals("handle")) return null;
+                    int number = (Integer) signal.getMethod("getNumber").invoke(args[0]);
+                    if (signalWaiting) {
+                        signals.offer(number);
+                    } else {
+                        System.out.flush();
+                        Runtime.getRuntime().halt(128 + number);
+                    }
+                    return null;
+                });
+            for (String name : new String[] { "INT", "TERM", "HUP" }) {
+                try {
+                    Object s = signal.getConstructor(String.class).newInstance(name);
+                    signal.getMethod("handle", signal, handlerType).invoke(null, s, handler);
+                } catch (ReflectiveOperationException | RuntimeException x) {
+                    // not this one here (the JVM may use it, or the system lack it)
+                }
+            }
+            signalsWanted = true;
+        } catch (ReflectiveOperationException | RuntimeException | LinkageError x) {
+            // no sun.misc.Signal: no signals for the program
+        }
+    }
+
+    /** The next signal for the module's signal thread; -1: there are none to wait for. */
+    static int signalWait() {
+        if (!signalsWanted) return -1;
+        signalWaiting = true;
+        try {
+            return signals.take();
+        } catch (InterruptedException x) {
+            Thread.currentThread().interrupt();
+            return -1;
+        }
     }
 
     /** A C string into buf; 0 if there is none or it does not fit. */

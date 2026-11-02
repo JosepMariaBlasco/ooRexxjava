@@ -138,20 +138,39 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp oorexx/interprete
 diff -ruN oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp oorexx/interpreter/platform/unix/SystemInterpreter.cpp
 --- oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp
 +++ oorexx/interpreter/platform/unix/SystemInterpreter.cpp
-@@ -143,6 +143,12 @@
+@@ -130,6 +130,12 @@
+  * @return 1 if the HALT was posted, 0 if one is still pending (not yet seen
+  *         by the program), as Interpreter::haltAllActivities().
+  */
++#if defined(__wasi__)
++// the host's hook (weak: a host without one has no signals): it starts what
++// delivers the host's signals to orxWasmSignal()
++extern "C" void orxWasiStartSignals(void) __attribute__((weak));
++#endif
++
+ extern "C" ORX_WASM_EXPORT(orxWasmSignal) int orxWasmSignal(int sig)
+ {
+     RexxString *name = sig == SIGTERM ? GlobalNames::SIGTERM_STRING :
+@@ -143,6 +149,18 @@
  
  void SystemInterpreter::startInterpreter()
  {
 +#if defined(__wasi__)
 +    // WASI preview 1 has no sigaction(); its emulated signal() only delivers
-+    // signals the program raises itself, so there is nothing more to set up.
++    // signals the program raises itself.  The host's signals arrive through
++    // the host's own hook, if it has one: it starts a thread that calls
++    // orxWasmSignal() for each SIGINT, SIGTERM or SIGHUP the host gets.
 +    signal(SIGINT, signalHandler);
 +    signal(SIGTERM, signalHandler);
++    if (orxWasiStartSignals != NULL)
++    {
++        orxWasiStartSignals();
++    }
 +#else
  
      /* Set the cleanup handler for unconditional process termination          */
      struct sigaction new_action;
-@@ -172,6 +178,7 @@
+@@ -172,6 +190,7 @@
      // Set SIGPIPE to ignore so that ADDRESS WITH pipes or rxsock sockets
      // may return EPIPE error codes instead of the interpreter being killed
      signal(SIGPIPE, SIG_IGN);

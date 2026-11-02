@@ -63,6 +63,7 @@ public final class RunWasm {
             module = Parser.parse(new File(args[0]));
             argv.set(0, new File(args[0]).getName());
         }
+        Host.installSignals(argv);
         WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv)
             .withDirectory("/", Path.of("/"));
         for (Map.Entry<String, String> e : System.getenv().entrySet()) if (!e.getKey().equals("PWD")) ob.withEnvironment(e.getKey(), e.getValue());

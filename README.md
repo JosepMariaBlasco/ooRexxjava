@@ -20,8 +20,8 @@ data queues, registrations, the macrospace) is shared between processes,
 as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
 (users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
-Not available yet: Java from Rexx, HALT
-(Ctrl-C). ooRexx's official test suite (test/trunk
+SIGINT (Ctrl-C), SIGTERM and SIGHUP raise HALT in the running program, as
+natively (`tests/halt.sh`). Not available yet: Java from Rexx. ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
 suite's native libraries) by a user other than root: **401 of 405** test
 groups pass (`results/suite-jvm-r13346-sockets.csv`). The four failures depend
