@@ -232,7 +232,9 @@ public final class Natives {
         Instance inst = RunWasm.current.get();
         if (inst == null) {
             // a Java thread that is not running wasm code: a pthread of the module is
-            // handed to it (Rexx.foreign), and the call runs there, still on this thread
+            // handed to it (Rexx.foreign), and the call runs there, still on this thread.
+            // A Java host that never started the module (JSR-223): start it now.
+            Rexx.startIfNeeded();
             Object[] out = Rexx.foreign(i -> {
                 try {
                     return new Object[] { call(id, self, args), null };

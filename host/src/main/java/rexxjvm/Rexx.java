@@ -181,6 +181,16 @@ public final class Rexx implements AutoCloseable {
         return current = new Rexx(t);
     }
 
+    /**
+     * Starts the module in the embedded mode if nothing has loaded it yet: a Java
+     * program that calls BSF4ooRexx's {@code native} methods (JSR-223, {@code RexxEngine})
+     * without having started the module itself. Beside an ordinary program, or once
+     * started, it does nothing.
+     */
+    static synchronized void startIfNeeded() {
+        if (current == null && RunWasm.module == null) start();
+    }
+
     /** Creates an interpreter instance (on a home thread of its own). */
     public Interpreter newInterpreter() {
         if (closed) throw new IllegalStateException("closed");

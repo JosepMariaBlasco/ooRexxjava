@@ -334,6 +334,33 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   only what they use (`todo`). All of
   `rgf_multithreading`'s cases pass (`tests/bsf/README.md`).
 
+## JSR-223, as built (02/11/2026)
+
+BSF4ooRexx's script engine (`RexxScriptEngine`) already worked from a Rexx
+program (`testUnits/.../07_rexx_JSR_223.testGroup`, in `rgf`): the module was
+running. From a plain Java program nothing had started it, and the first
+`native` method BSF4ooRexx calls (`jniSetupNativeJVMPointer`, from
+`RexxAndJava`'s constructor) waited forever for a dispatcher that did not
+exist. Two changes, in Java only:
+
+- **The module starts by itself.** `Natives.call`, on a Java thread that is not
+  running wasm code, calls `Rexx.startIfNeeded()` before the foreign entry: if
+  nothing has loaded the module (`RunWasm.module` null, no `Rexx.current`), it
+  is started in the embedded mode, as `Rexx.start()` does. Beside an ordinary
+  program, or once started, it does nothing. The host names no class of ours.
+- **`BSF.CLS` is found without `PATH`.** In the embedded mode the module's
+  `PATH` starts with the interpreter's directory (`-Drexxjvm.home`, by default
+  the directory of `rexxj.jar`), as the `rexxj` script does for a program; so
+  `::requires "BSF.CLS"` finds it beside `rexx.img`.
+
+Results in `tests/jsr223/` (21 checks: `eval`, `Compilable`, `Invocable`
+with `getInterface`, bindings, the context's writer, errors as
+`ScriptException`, 8 Java threads, two engines): all pass. About 20 ms per
+`invokeFunction`: some 6.7 foreign entries each (`jniRexxSendMessageToRexxObject`,
+`jniUnregisterRexxObject`); creating their `Instance`s is about 16% of the time
+(JFR), the rest is the interpreter running. So pre-created entry threads would
+save little here; the interpreter's raw speed is what matters.
+
 ## Other implications
 
 - **Speed.** Chicory translates the module to JVM bytecode. Each emulated
@@ -357,6 +384,6 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
 2. The embedded mode. Done (strings only).
 3. The mini-JNI and the object table. Done.
 4. BSF4ooRexx, measured with its `testUnits/`. Done, unchanged; all of
-   them pass since the threads' smaller C stack (memory per thread); JSR-223
-   (`RexxScriptEngine`, Java hosting Rexx through BSF4ooRexx) not tried yet.
+   them pass since the threads' smaller C stack (memory per thread). JSR-223
+   from a plain Java program: done (see "JSR-223, as built").
 5. Layer 2.

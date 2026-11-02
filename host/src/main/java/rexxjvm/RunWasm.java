@@ -92,7 +92,18 @@ public final class RunWasm {
         boolean interp = Boolean.getBoolean("rexxjvm.interp");
         WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv)
             .withDirectory("/", Path.of("/"));
-        for (Map.Entry<String, String> e : System.getenv().entrySet()) if (!e.getKey().equals("PWD")) ob.withEnvironment(e.getKey(), e.getValue());
+        // A Java host (the embedded mode, JSR-223): the interpreter's directory goes first
+        // in PATH, as the rexxj script puts it, so that ::requires finds BSF.CLS and the
+        // other .cls beside rexx.img without the host having to set PATH.
+        String path = System.getenv("PATH");
+        String home = embedded ? Host.libraryDirectory() : null;
+        if (home != null) {
+            home = home.endsWith("/") && home.length() > 1 ? home.substring(0, home.length() - 1) : home;
+            path = path == null || path.isEmpty() ? home : home + ":" + path;
+        }
+        for (Map.Entry<String, String> e : System.getenv().entrySet())
+            if (!e.getKey().equals("PWD") && !e.getKey().equals("PATH")) ob.withEnvironment(e.getKey(), e.getValue());
+        if (path != null) ob.withEnvironment("PATH", path);
         ob.withEnvironment("PWD", System.getProperty("user.dir"));
         // the C stack of the threads the interpreter creates (compat/orx_wasi_host.c,
         // orxWasiThreadStack): -Drexxjvm.threadstack=1M, else REXXJVM_THREADSTACK

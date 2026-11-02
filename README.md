@@ -21,7 +21,7 @@ as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
 (users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
 SIGINT (Ctrl-C), SIGTERM and SIGHUP raise HALT in the running program, as
-natively (`tests/halt.sh`). A Java program can host the interpreter (see *Rexx from Java* below); not available yet: Java from Rexx. ooRexx's official test suite (test/trunk
+natively (`tests/halt.sh`). A Java program can host the interpreter (see *Rexx from Java* below, and JSR-223), and Rexx can use Java through BSF4ooRexx, unchanged. ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
 suite's native libraries) by a user other than root: **401 of 405** test
 groups pass (`results/suite-jvm-r13346-sockets.csv`). The four failures depend
@@ -200,6 +200,24 @@ tests in `tests/bsf/` and `tests/jni/`. A Java program that hosts the
 interpreter (`rexxjvm.Rexx`) and uses BSF4ooRexx needs `-javaagent:rexxj.jar`
 too.
 
+The other direction works as well: a Java program can run Rexx through
+JSR-223 (`javax.script`), with BSF4ooRexx's own script engine, without naming
+any class of ours. It needs `rexxj.jar` as a Java agent and on the class path,
+`bsf4oorexx.jar` on the class path, and `-Xss16m`; the module starts by itself
+the first time BSF4ooRexx needs it, and finds `BSF.CLS` beside `rexx.img`.
+
+```java
+ScriptEngine rexx = new ScriptEngineManager().getEngineByName("rexx");
+Object r = rexx.eval("return reverse('hi!')");    // "!ih"
+```
+
+```bash
+java -Xss16m -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. MyHost
+```
+
+Test and its notes in `tests/jsr223/` (about 20 ms per `invokeFunction` for
+now, mostly the interpreter's speed).
+
 ## Threads and their stacks
 
 Every Rexx thread (`START`, `REPLY`, a Java thread calling Rexx) is a wasm
@@ -233,7 +251,7 @@ per thread").
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's. |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
 | `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |
 | `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |
