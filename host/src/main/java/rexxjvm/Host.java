@@ -272,7 +272,8 @@ final class Host {
      * Windows: a command as the module gives it, in the host's form; false if there is
      * no such command. The shells' environments come as "/bin/NAME -c command"
      * (SystemCommands.cpp): "" ADDRESS SYSTEM, COMMAND and SH as /bin/sh, which here is
-     * cmd.exe (%ComSpec%), as natively on Windows; ADDRESS CMD too; any other shell
+     * cmd.exe (%ComSpec%), as natively on Windows (and /bin/cmd, should the interpreter
+     * ever have an ADDRESS CMD: the Unix one has none, it is Error 3); any other shell
      * (bash, pwsh, powershell) is looked up in PATH and given "-c" as it is. ADDRESS
      * PATH's command name is looked up in PATH with PATHEXT. The command's PATH and
      * name go back to the host's form; its other arguments are as the program gave them.
