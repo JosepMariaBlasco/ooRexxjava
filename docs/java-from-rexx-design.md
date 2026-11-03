@@ -455,7 +455,7 @@ suite) needs the launcher's state per run first; this is that step.
   as a HALT; no wasm threads left and every run's memory collected. `rexxj`
   unchanged: the repository's tests, `tests/halt.sh`, `tests/embed` (41),
   `tests/jsr223` (21), `tests/jni` (100), `tests/bsf`, BSF4ooRexx's
-  `testUnits` and ooRexx's suite (README, "Several runs in one JVM").
+  `testUnits` (same counts) and ooRexx's suite: 400/405 (`results/suite-jvm-r13346-runs.csv`, two groups at a time; v9 398/405): left only the timing ones, `ProcessInvocation` over 300 s, `TRACE`, `TRACE_TraceObject`, `scclient`, `sfclient`.
 - **Next** (Josep Maria decides): a server that keeps a warm JVM, and a small
   native `rexx` client (arguments, environment, directory, its standard
   streams as `/proc/<pid>/fd/0,1,2`, signals, exit code), first only for the
