@@ -302,7 +302,7 @@ final class Run {
             List.of(ValType.I32), List.of(ValType.I32), (inst, a) -> new long[] { spawn((int) a[0]) });
         MemoryImport mi = module.memoryImport;
         imports = ImportValues.builder()
-            .addFunction(wasi.toHostFunctions())
+            .addFunction(WinWasi.functions(wasi))
             .addFunction(spawn)
             .addFunction(Host.functions().toArray(new HostFunction[0]))
             .addFunction(RxApi.functions().toArray(new HostFunction[0]))
