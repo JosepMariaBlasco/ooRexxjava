@@ -27,7 +27,8 @@ says what "core" should mean.
 ## What BSF4ooRexx is made of
 
 Read in `JosepMariaBlasco/BSF4ooRexx`, branch `main` (the SVN `branches/850`),
-commit `eafe4e6`, directory `bsf4oorexx.dev/`. License: Apache 2.0
+commit `eafe4e6` (r1125), directory `bsf4oorexx.dev/`; the build takes SVN
+r1131 from SourceForge since 3/11/2026 (r1126–r1131 change no C++). License: Apache 2.0
 (`Apache_LICENSE_2.0.txt`).
 
 | Part | Size | What it is |
@@ -272,8 +273,8 @@ module, and the start-up `native` methods redirected to it.
 
 BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
 
-- **The native library, untouched.** `BSF4ooRexx.cc` (branch 850, commit
-  `eafe4e6` of the Git import) compiles for wasm32 against the mini-JNI
+- **The native library, untouched.** `BSF4ooRexx.cc` (branch 850, r1125
+  to r1131, identical) compiles for wasm32 against the mini-JNI
   without a single change. The only thing it lacked was `dlopen` / `dlsym`,
   with which `BsfLoadJava` loads `libjvm.so` and finds `JNI_CreateJavaVM`: it
   is compiled with `-Ddlopen=orx_bsf_dlopen ...`, and `compat/orx_bsf.c`'s

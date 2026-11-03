@@ -85,8 +85,8 @@ Needs `svn`, `git`, `cmake`, `make`, Java 11 or later and Maven, and network
 access (wasi-sdk 34, ooRexx trunk r13358 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
-commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx from the commit `BSF_REV`
-of its Git import, `JosepMariaBlasco/BSF4ooRexx`, Maven Central).
+commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at
+the revision `BSF_REV` from SourceForge, Maven Central).
 The result is `dist/`, self-contained: `dist/rexxj program.rex` runs a
 Rexx program.
 

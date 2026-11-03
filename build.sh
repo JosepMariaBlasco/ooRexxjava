@@ -17,12 +17,13 @@ if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; t
 fi
 # BSF4ooRexx (Rony G. Flatscher's ooRexx-Java bridge, Apache 2.0), layer 1 of Java from
 # Rexx: its native library compiled into rexx.wasm, its Java classes and BSF.CLS as they
-# are, from a fixed commit of the Git import of its SVN branch 850
-BSF_REV=eafe4e6335b70e58fbb181265f10bceca3f161f5
-if [ "$(git -C BSF4ooRexx rev-parse HEAD 2>/dev/null)" != "$BSF_REV" ]; then
-  rm -rf BSF4ooRexx && git init -q BSF4ooRexx
-  git -C BSF4ooRexx fetch -q --depth 1 https://github.com/JosepMariaBlasco/BSF4ooRexx "$BSF_REV"
-  git -C BSF4ooRexx checkout -q FETCH_HEAD
+# are, from a fixed revision of its SVN branch 850 on SourceForge (r1131: Rony's id2x fix
+# for 32-bit interpreters; the Git import stops at r1125)
+BSF_REV=1131
+if [ "$(cat BSF4ooRexx/.svn-rev 2>/dev/null)" != "$BSF_REV" ]; then
+  rm -rf BSF4ooRexx BSF4ooRexx.tmp
+  svn export -q -r "$BSF_REV" https://svn.code.sf.net/p/bsf4oorexx/code/branches/850 BSF4ooRexx.tmp
+  echo "$BSF_REV" > BSF4ooRexx.tmp/.svn-rev && mv BSF4ooRexx.tmp BSF4ooRexx
 fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
