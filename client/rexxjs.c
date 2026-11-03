@@ -3,6 +3,7 @@
  * instead of starting one: what rexxj does, without the JVM's start-up and warm-up.
  *
  *   rexxjs [args...]          as rexxj [args...]
+ *   rexxjs --orx-server-stop  ends this build's server, and the programs it runs
  *
  * The server is found by a socket named after the user and the build
  * ($TMPDIR/.ooRexx-jvm-USER-server-KEY, KEY from rexxj.jar's inode, size and time);
@@ -30,6 +31,7 @@
 #include <sys/socket.h>
 #include <sys/stat.h>
 #include <sys/un.h>
+#include <sys/wait.h>
 #include <termios.h>
 #include <time.h>
 #include <unistd.h>
@@ -126,7 +128,9 @@ static void start_server(const char *path) {
     snprintf(exe, sizeof exe, "-Drexxjvm.executable=%s/rexx", dir);
     snprintf(home, sizeof home, "-Drexxjvm.home=%s", dir);
     snprintf(agent, sizeof agent, "-javaagent:%s/rexxj.jar", dir);
-    snprintf(cp, sizeof cp, "%s/rexxj.jar:%s/bsf4oorexx.jar", dir, dir);
+    /* rexxj.jar alone: each run has a class loader of its own for BSF4ooRexx and the
+       client's CLASSPATH (rexxjvm.Server) */
+    snprintf(cp, sizeof cp, "%s/rexxj.jar", dir);
     av[n++] = "java";
     av[n++] = "-Xss16m";
     char *opts = getenv("REXXJ_JAVA_OPTIONS");     /* as rexxj: split at blanks */
@@ -168,6 +172,47 @@ static void forward(int sig) {
 
 /* ---- main ---- */
 
+/*
+ * rexxjs --orx-stdin-at OFFSET REPORT COMMAND [ARGS...]: what the server runs a
+ * command through when the client's standard input is a regular file (Host.java). The
+ * command gets the file as a new open file description (/proc/PID/fd/0), whose offset
+ * is 0, where natively it would share the client's: so it is moved to OFFSET, where the
+ * program's reading has reached, the command runs on a child, and the offset it leaves
+ * is written to the file REPORT, from where the program goes on reading, as natively.
+ * Exits as the command did (a signal is raised again on itself).
+ */
+static pid_t stdin_child;
+static void stdin_forward(int sig) { if (stdin_child > 0) kill(stdin_child, sig); }
+
+static int stdin_at(char **argv) {
+    if (!argv[2] || !argv[3] || !argv[4]) { fputs("rexxjs: --orx-stdin-at OFFSET REPORT COMMAND...\n", stderr); return 2; }
+    off_t at = (off_t)strtoll(argv[2], NULL, 10);
+    if (at > 0) (void)lseek(0, at, SEEK_SET);
+    signal(SIGINT, stdin_forward);
+    signal(SIGTERM, stdin_forward);
+    signal(SIGHUP, stdin_forward);
+    stdin_child = fork();
+    if (stdin_child < 0) { perror("rexxjs: fork"); return 127; }
+    if (stdin_child == 0) {
+        signal(SIGINT, SIG_DFL);
+        signal(SIGTERM, SIG_DFL);
+        signal(SIGHUP, SIG_DFL);
+        execvp(argv[4], argv + 4);
+        _exit(127);
+    }
+    int st;
+    while (waitpid(stdin_child, &st, 0) < 0) if (errno != EINTR) { st = 127 << 8; break; }
+    off_t now = lseek(0, 0, SEEK_CUR);
+    FILE *f = fopen(argv[3], "w");
+    if (f) { fprintf(f, "%lld\n", (long long)now); fclose(f); }
+    if (WIFSIGNALED(st)) {
+        signal(WTERMSIG(st), SIG_DFL);
+        kill(getpid(), WTERMSIG(st));
+        return 128 + WTERMSIG(st);
+    }
+    return WIFEXITED(st) ? WEXITSTATUS(st) : 127;
+}
+
 int main(int argc, char **argv) {
     (void)argc;
     char self[PATH_MAX];
@@ -178,15 +223,19 @@ int main(int argc, char **argv) {
     char *slash = strrchr(dir, '/');
     if (slash) *slash = 0;
 
+    if (argv[1] && strcmp(argv[1], "--orx-stdin-at") == 0) return stdin_at(argv);
+
     /* what only rexxj does: the API server's daemon */
     if (argv[1] && strcmp(argv[1], "--orx-wasm-rxapi") == 0) fallback(argv);
+    /* rexxjs --orx-server-stop: ends this build's server (and the programs it runs) */
+    int stop = argv[1] && strcmp(argv[1], "--orx-server-stop") == 0;
 
     /* the standard streams: kinds and offsets; closed or a socket: rexxj */
     char kind[3];
     int64_t offset[3];
     for (int fd = 0; fd < 3; fd++) {
         struct stat st;
-        if (fstat(fd, &st) < 0 || S_ISSOCK(st.st_mode)) fallback(argv);
+        if ((fstat(fd, &st) < 0 || S_ISSOCK(st.st_mode)) && !stop) fallback(argv);
         offset[fd] = -1;
         if (isatty(fd)) kind[fd] = 'T';
         else if (S_ISREG(st.st_mode)) {
@@ -214,6 +263,14 @@ int main(int argc, char **argv) {
     if (strlen(path) >= sizeof(((struct sockaddr_un *)0)->sun_path)) fallback(argv);
 
     int s = connect_to(path);
+    if (stop) {
+        if (s < 0) { fprintf(stderr, "rexxjs: no server running\n"); return 1; }
+        if (write_all(s, "RXJS", 4) < 0) { fprintf(stderr, "rexxjs: the server went away\n"); return 70; }
+        char c;
+        while (read(s, &c, 1) < 0 && errno == EINTR) { }    /* it closes the connection as it goes */
+        fprintf(stderr, "rexxjs: server stopped\n");
+        return 0;
+    }
     if (s < 0) {
         start_server(path);
         struct timespec ts = { 0, 50 * 1000 * 1000 };

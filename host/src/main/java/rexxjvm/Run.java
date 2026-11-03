@@ -131,6 +131,19 @@ final class Run {
          * (the process's are inherited; a hosted run's own are copied, and no input).
          */
         ProcessBuilder.Redirect cmdIn, cmdOut, cmdErr;
+        /**
+         * The class loader of the run's Java side (a server's run: BSF4ooRexx and the
+         * client's CLASSPATH), the context class loader of its threads; null: the
+         * thread's. Java threads with no run of their own that call a native method of a
+         * class it loaded enter this run ({@link #forLoader}).
+         */
+        ClassLoader loader;
+        /**
+         * The client's standard input when it is a regular file (a server's run), the
+         * channel the run reads it through: commands read it from where the run's
+         * reading has reached, and the run goes on from where they left it (Host).
+         */
+        java.nio.channels.FileChannel inFile;
     }
 
     // ---- the run ------------------------------------------------------------------------
@@ -152,6 +165,8 @@ final class Run {
     static final ThreadLocal<Instance> INSTANCE = new ThreadLocal<>();
     /** The run that serves Java threads with no run of their own: the first one started. */
     private static Run primary;
+    /** The runs with a class loader of their own (Options.loader), by loader. */
+    private static final Map<ClassLoader, Run> BY_LOADER = new ConcurrentHashMap<>();
 
     final int id = IDS.getAndIncrement();
     final Module module;
@@ -164,6 +179,10 @@ final class Run {
     final OutputStream out, err;
     /** Where commands read and write instead (Options.cmdIn, cmdOut, cmdErr); null: as above. */
     final ProcessBuilder.Redirect cmdIn, cmdOut, cmdErr;
+    /** The class loader of the run's Java side (Options.loader); null: none of its own. */
+    final ClassLoader loader;
+    /** The client's standard input as a regular file (Options.inFile); null if it is not one. */
+    final java.nio.channels.FileChannel inFile;
     final Memory memory;
     final ImportValues imports;
     private final WasiPreview1 wasi;
@@ -203,6 +222,8 @@ final class Run {
         cmdIn = o.cmdIn;
         cmdOut = o.cmdOut;
         cmdErr = o.cmdErr;
+        loader = o.loader;
+        inFile = o.inFile;
 
         // the module, and its argv: a .wasm file first, else the one translated at build time
         List<String> args = o.args;
@@ -264,8 +285,22 @@ final class Run {
         signalsWanted = !process && !embedded;
 
         synchronized (Run.class) {
-            if (primary == null) primary = this;
+            if (primary == null && loader == null) primary = this;
         }
+        if (loader != null) BY_LOADER.put(loader, this);
+    }
+
+    /**
+     * The run whose Java side a class loader belongs to (it or one of its ancestors is a
+     * run's Options.loader); null if none.
+     */
+    static Run forLoader(ClassLoader l) {
+        if (BY_LOADER.isEmpty()) return null;
+        for (; l != null; l = l.getParent()) {
+            Run r = BY_LOADER.get(l);
+            if (r != null) return r;
+        }
+        return null;
     }
 
     /** The run of the current thread, if it runs wasm code (or a foreign entry); else null. */
@@ -411,6 +446,10 @@ final class Run {
         }
         synchronized (Run.class) {
             if (primary == this) primary = null;
+        }
+        if (loader != null) {
+            BY_LOADER.remove(loader, this);
+            Jni.releaseLoader(loader);
         }
     }
 

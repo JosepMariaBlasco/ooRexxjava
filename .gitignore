@@ -1,2 +1,4 @@
 host/target/
 host/dependency-reduced-pom.xml
+tests/server/a/*.class
+tests/server/b/*.class

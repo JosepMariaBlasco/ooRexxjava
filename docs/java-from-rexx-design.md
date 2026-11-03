@@ -503,8 +503,13 @@ The first use of runs: a minimal server and client, meant for the suite first.
   input from a regular file starts at the client's offset and the client's
   offset moves to where the program left it. Commands the program runs get the
   same files (`Run.Options.cmdIn/Out/Err`, `ProcessBuilder.Redirect`): their
-  output interleaves with the program's as natively. Not exact: a command's
-  input from a regular file starts at its beginning; and `stdout`/`stderr` to
+  output interleaves with the program's as natively. A command's input from a
+  regular file (since 3/11/2026): `/proc/PID/fd/0` opens a new open file
+  description, at offset 0, where natively the command shares the client's; so
+  the command runs through `rexxjs --orx-stdin-at OFFSET REPORT`, which moves it
+  to where the program's reading is, runs the command on a child, and writes the
+  offset it leaves to `REPORT`, from where the program goes on (`Host.commandRun`).
+  Not exact: `stdout`/`stderr` to
   the same file interleave unbuffered (natively stdout is buffered: the order
   differs from native, as `rexxj`'s does too, `tests/err.rex`).
 - **`rexxjs`** (`client/rexxjs.c`, ~330 lines of C): finds or starts the
@@ -536,11 +541,43 @@ The first use of runs: a minimal server and client, meant for the suite first.
   through the server once warm (the first 4.8–8.1 s), 8.2–9.8 s with `rexxj`,
   2.2–2.6 s natively. `say "hi"`: ~1.2–2 s the first time (the server
   starts), then 100–140 ms. BSF4ooRexx works through it (`tests/bsf/basics.rex`).
-- **Left for a product version** (Josep Maria decides): a class loader per run
-  for BSF4ooRexx and the client's `CLASSPATH` (now the server's class path,
-  and foreign Java threads enter the primary run); isolation (a run that
-  exhausts the Java heap affects all); macOS (no `/proc`: the streams would
-  have to be relayed); stopping or replacing the server explicitly.
+- **Towards a product version** (Josep Maria, 3/11/2026; in this order: Linux,
+  then the streams relayed through the socket for macOS and Windows, then
+  `rexxj` on Windows, then a Win32 client). Done on Linux:
+  - *A class loader per run* (`Server.loader`): `bsf4oorexx.jar`, then the
+    client's `CLASSPATH` as `java -cp` takes it (relative to the client's
+    directory, `dir/*`, an empty entry the directory); its parent has
+    `rexxj.jar` alone, the server's class path (`rexxjs` starts it so). So
+    BSF4ooRexx's statics and the client's classes start afresh in every run,
+    and two runs at once see different classes of the same name. It is the
+    context class loader of the run's threads, which `Jni.findClass` uses and
+    the threads they start inherit. A Java thread with no run of its own that
+    calls a native method enters the run whose loader loaded the class
+    (`Run.forLoader`, from `Natives.call`), no longer the first run. The agent
+    rewrites the classes in every loader; a method keeps its id across loaders
+    (`Natives.ids`), so nothing grows with the runs. When a run ends its
+    loader must go too: `Jni.releaseLoader` drops its classes' method and field
+    ids (their `Method`s kept the loader alive), and `Server.endJavaThreads`
+    interrupts the Java threads the run started and left (their context loader
+    is the run's): BSF4ooRexx's `RexxCleanupRef` cleaner, one per run, waits on
+    a reference queue for ever otherwise (it says so in the server's log when
+    interrupted). 21 runs with BSF4ooRexx leave one `RexxEngine` class loaded.
+    A run with BSF4ooRexx through the server: 0.2–0.3 s (2.3 s with `rexxj`).
+  - *System.out, System.err and System.in* of Java code (`Server.route`): the
+    calling thread's run's streams, the client's, as with `rexxj`; the server's
+    for a thread of no run. Before, Java's output went to the server's log.
+  - *A command's input from a regular file* from the right offset (above).
+  - *`rexxjs --orx-server-stop`*: the runs in progress end (143), the socket
+    goes, the JVM ends; a server started meanwhile waits for the old one's lock.
+  - Tests: `tests/server/run.sh` (12 checks).
+
+  What runs still share, and will: the JVM's heap (a run that exhausts it
+  affects all) and `System.exit` (Java code that calls it ends the server and
+  every run: BSF4ooRexx calls Java by reflection, so the call cannot be
+  rewritten); `System.getenv` and `user.dir` (Java code sees the server's
+  environment and directory, `/`, not the client's: a relative `java.io.File`
+  is resolved against `/`); the default `Locale`, `TimeZone` and charset;
+  system properties.
 
 ## Other implications
 

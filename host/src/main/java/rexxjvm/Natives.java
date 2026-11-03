@@ -57,6 +57,8 @@ public final class Natives {
     }
 
     private static final List<Info> infos = Collections.synchronizedList(new ArrayList<>());
+    /** The id of each rewritten method, by owner, name and descriptor (guarded by infos). */
+    private static final Map<String, Integer> ids = new HashMap<>();
 
     static char kind(Type t) {
         switch (t.getSort()) {
@@ -150,9 +152,19 @@ public final class Natives {
                     };
                 }
                 boolean st = (access & Opcodes.ACC_STATIC) != 0;
-                Info info = new Info(owner, name, desc, st, nativeNames.get(name) > 1);
+                // one id per method, whichever class loader loads its class (a server's
+                // runs each load BSF4ooRexx again): the list does not grow with the runs
+                boolean overloaded = nativeNames.get(name) > 1;
                 int id;
-                synchronized (infos) { infos.add(info); id = infos.size() - 1; }
+                synchronized (infos) {
+                    Integer known = ids.get(owner + "." + name + desc);
+                    if (known != null) id = known;
+                    else {
+                        infos.add(new Info(owner, name, desc, st, overloaded));
+                        id = infos.size() - 1;
+                        ids.put(owner + "." + name + desc, id);
+                    }
+                }
                 MethodVisitor mv = super.visitMethod(access & ~Opcodes.ACC_NATIVE, name, desc, sig, ex);
                 mv.visitCode();
                 mv.visitLdcInsn(id);
@@ -242,9 +254,12 @@ public final class Natives {
         if (inst == null) {
             // a Java thread that is not running wasm code: a pthread of the module is
             // handed to it (a foreign entry), and the call runs there, still on this
-            // thread. Which module: the run that serves such threads (the first one);
-            // a Java host that never started the module (JSR-223): it is started now.
-            Run run = Rexx.primaryOrStart();
+            // thread. Which module: the run whose class loader loaded the class (a
+            // server's run), else the run that serves such threads (the first one); a
+            // Java host that never started the module (JSR-223): it is started now.
+            Class<?> c = self instanceof Class ? (Class<?>) self : self.getClass();
+            Run run = Run.forLoader(c.getClassLoader());
+            if (run == null) run = Rexx.primaryOrStart();
             Object[] out = run.entries.foreign(i -> {
                 try {
                     return new Object[] { call(id, self, args), null };

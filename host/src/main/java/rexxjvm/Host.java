@@ -160,6 +160,26 @@ final class Host {
             if (exe == null) return UNKNOWN_COMMAND;
             argv.set(0, exe);
         }
+        // A server's client with a regular file as standard input: the command gets the
+        // file through a new open file description (cmdIn, /proc/PID/fd/0), at offset 0,
+        // where natively it shares the client's. rexxjs --orx-stdin-at moves it to where
+        // the run's reading is, and reports where the command left it (client/rexxjs.c).
+        Run run = Run.current();
+        File report = null;
+        if (run != null && run.inFile != null && run.cmdIn != null && (flags & INPUT) == 0) {
+            String home = libraryDirectory();
+            File rexxjs = home == null ? null : new File(home, "rexxjs");
+            if (rexxjs != null && rexxjs.canExecute()) {
+                try {
+                    report = File.createTempFile("rexxj-stdin", ".at");
+                    argv.addAll(0, List.of(rexxjs.getPath(), "--orx-stdin-at",
+                        Long.toString(run.inFile.position()), report.getPath()));
+                } catch (IOException x) {
+                    if (report != null) report.delete();
+                    report = null;                    // as before: from the start of the file
+                }
+            }
+        }
         ProcessBuilder pb = new ProcessBuilder(argv);
         pb.environment().clear();
         pb.environment().putAll(env);
@@ -168,7 +188,6 @@ final class Host {
         // A run with standard streams of its own (a hosted run's) cannot give them to the
         // process: the command's output is copied to them, and it reads no input.
         // A run can say where commands read and write (a server: its client's streams).
-        Run run = Run.current();
         ProcessBuilder.Redirect toIn = run == null ? null : run.cmdIn;
         ProcessBuilder.Redirect toOut = run == null ? null : run.cmdOut, toErr = run == null ? null : run.cmdErr;
         OutputStream runOut = run == null || toOut != null ? null : run.out;
@@ -191,6 +210,7 @@ final class Host {
         try {
             p = pb.start();
         } catch (IOException x) {
+            if (report != null) report.delete();
             return UNKNOWN_COMMAND;
         }
         Thread feeder = null, outReader = null, errReader = null;
@@ -208,8 +228,19 @@ final class Host {
             for (Thread t : new Thread[] { feeder, outReader, errReader }) if (t != null) t.join();
         } catch (InterruptedException x) {
             p.destroy();
+            if (report != null) report.delete();
             Thread.currentThread().interrupt();
             return UNKNOWN_COMMAND;
+        }
+        if (report != null) {
+            try {
+                String at = new String(java.nio.file.Files.readAllBytes(report.toPath()), StandardCharsets.US_ASCII).trim();
+                if (!at.isEmpty()) run.inFile.position(Long.parseLong(at));
+            } catch (IOException | NumberFormatException x) {
+                // the command left no offset: the run's stays where it was
+            } finally {
+                report.delete();
+            }
         }
         if (out) rs[0] = outBytes.toByteArray();
         if (err && !(out && same)) rs[1] = errBytes.toByteArray();

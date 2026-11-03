@@ -202,6 +202,30 @@ final class Jni {
     private static final Map<Class<?>, Map<String, Integer>> methodIds = new WeakHashMap<>();
     private static final Map<Class<?>, Map<String, Integer>> fieldIds = new WeakHashMap<>();
 
+    /**
+     * Forgets the method and field ids of the classes a class loader (or one of its
+     * descendants) loaded: a server's run that ends, whose loader would otherwise be kept
+     * alive, with every class of BSF4ooRexx and of the client's CLASSPATH, by the
+     * entries' Method and Field objects. Its ids are not used again.
+     */
+    static synchronized void releaseLoader(ClassLoader l) {
+        for (int i = 1; i < methods.size(); i++) {
+            MethodEntry m = methods.get(i);
+            if (m != null && within(m.e.getDeclaringClass(), l)) methods.set(i, null);
+        }
+        for (int i = 1; i < fields.size(); i++) {
+            FieldEntry f = fields.get(i);
+            if (f != null && within(f.f.getDeclaringClass(), l)) fields.set(i, null);
+        }
+        methodIds.keySet().removeIf(c -> within(c, l));
+        fieldIds.keySet().removeIf(c -> within(c, l));
+    }
+
+    private static boolean within(Class<?> c, ClassLoader l) {
+        for (ClassLoader x = c.getClassLoader(); x != null; x = x.getParent()) if (x == l) return true;
+        return false;
+    }
+
     static synchronized MethodEntry method(int id) { return methods.get(id); }
     static synchronized FieldEntry field(int id) { return fields.get(id); }
 

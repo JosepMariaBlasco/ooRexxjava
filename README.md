@@ -272,11 +272,18 @@ rexx program.rex        # the first time ~2 s (the server starts); then ~0.1 s
 For now it is meant for running many short programs, ooRexx's test suite above
 all: through it the suite takes 4 minutes and a half instead of about 21
 (405/405 groups pass; natively 2 min 24 s: about twice as fast), and the Rexx Parser checking one of its files about
-4 s instead of 9 (natively 2.4). What differs from `rexxj`: programs share one JVM (a crash or an
-`OutOfMemoryError` affects all of them); commands a program runs read the
-client's input from the start of a regular file; and BSF4ooRexx's Java side is
-shared by the programs (the class path is the server's, not each client's
-`CLASSPATH`).
+4 s instead of 9 (natively 2.4); a program with BSF4ooRexx, 0.2–0.3 s instead
+of 2.3. Each program has a class loader of its own for BSF4ooRexx and the
+client's `CLASSPATH`, so its Java classes and their statics start afresh;
+Java's `System.out`, `System.err` and `System.in` are the client's. What
+differs from `rexxj`: programs share one JVM, so a crash, an
+`OutOfMemoryError` or Java code that calls `System.exit` affects all of them;
+and Java code sees the server's environment and current directory (`/`), not
+the client's (`docs/java-from-rexx-design.md`, "The warm JVM and its client").
+
+```bash
+rexxjs --orx-server-stop    # ends this build's server and the programs it runs
+```
 
 ## Speed
 
