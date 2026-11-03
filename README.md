@@ -341,8 +341,9 @@ r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
   Endive (bytecodealliance/endive#273), which means to fix it.
 - **`FlatMemory`**: the linear memory as one flat block outside the heap (see
   "Threads and their stacks"), with `sun.misc.Unsafe`. JDK 24 and later warn
-  about it on its first use (JEP 498); `REXXJ_JAVA_OPTIONS=--sun-misc-unsafe-memory-access=allow`
-  silences them. A JVM that refuses it (`=deny`, a later JDK's default) gets,
+  about it on its first use (JEP 498), unless the JVM is started with
+  `--sun-misc-unsafe-memory-access=allow`, which the launchers pass on Java 23
+  and later (the version read from the `release` file of the `java` in `PATH`). A JVM that refuses it (`=deny`, a later JDK's default) gets,
   on Java 22 and later, the same memory through `java.lang.foreign` instead,
   by itself, about a third slower (`-Drexxjvm.memory=mapped` asks for it;
   `docs/java-from-rexx-design.md`). Build with Maven on JDK 22 or later for
@@ -393,7 +394,7 @@ per thread").
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
-| `launchers/windows/` | `rexx.cmd`, `rexxj.cmd` and the tools' launchers for Windows ("Windows"). |
+| `launchers/` | `unix/rexxj`, the launcher (`build.sh` copies it into `dist/`); `windows/`, `rexx.cmd`, `rexxj.cmd` and the tools' launchers for Windows ("Windows"). |
 | `client/` | `rexxjs.c`, the native client of the warm JVM ("A warm JVM: `rexxjs`"). |
 | `host/` | The Java launcher (Maven; Endive's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Endive's (formerly Chicory's) compiler, README "Speed"). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223; `windows/`, the checks the Windows CI job runs. |

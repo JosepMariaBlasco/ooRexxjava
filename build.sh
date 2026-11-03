@@ -95,15 +95,8 @@ mkdir -p dist/samples && find oorexx/samples -maxdepth 1 -type f ! -name CMakeLi
 # (Chicory's build-time compiler), so that start-up does not translate it again
 (cd "$HERE/host" && "$HERE/scripts/mvn22.sh" -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
 cp "$HERE/host/target/rexxj.jar" dist/
-# -Xss: Java threads the module did not create (Swing's, a pool's) may enter it, and
-# Chicory's frames live on their Java stack (prototypes/threads/README.md)
-# -cp, not -jar: Java code that Rexx uses is found through CLASSPATH, as with BSF4ooRexx;
-# the jar is also the agent that gives BSF4ooRexx's native methods to the module (Natives)
-# $REXXJ_JAVA_OPTIONS: more options for the JVM, e.g. -XX:-DontCompileHugeMethods for long
-# runs (README.md, "Speed")
-# $REXXJ_SERVER: run the program in a warm JVM through rexxjs, the native client of
-# rexxjvm.Server (client/rexxjs.c; README.md, "A warm JVM: rexxjs"), if it was built
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\n[ -n "$REXXJ_SERVER" ] && [ -x "$D/rexxjs" ] && exec "$D/rexxjs" "$@"\nPATH="$D:$PATH" exec java -Xss16m $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
+# rexxj: launchers/unix/rexxj (the JVM's options, CLASSPATH, REXXJ_SERVER, Unsafe on Java 23+)
+cp "$HERE/launchers/unix/rexxj" dist/rexxj
 chmod +x dist/rexxj
 # rexxjs: built on Linux only for now (the server opens the client's streams as
 # /proc/PID/fd/N, or with REXXJ_SERVER_RELAY they are relayed through the socket, the
