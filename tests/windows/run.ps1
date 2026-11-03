@@ -18,13 +18,20 @@ function Info($name, $file) {
     & $rexx $file 2>&1 | Select-Object -First 25 | ForEach-Object { "     $_" }
     "     (exit $LASTEXITCODE)"
 }
-$out = & $rexx -e "say 'hi'" 2>&1
+# the checks read standard output only (JDK 24+ warn on standard error about Unsafe, JEP 498)
+$out = & $rexx -e "say 'hi'" 2>$null
 Check "say" "hi" ($out -join "|")
-$out = & $rexx args.rex "x  y" 2>&1
+$out = & $rexx args.rex "x  y" 2>$null
 Check "argument" "[x  y]" ($out -join "|")
 Check "exit code" 7 $LASTEXITCODE
-$out = & $rexx files.rex 2>&1
+$out = & $rexx files.rex 2>$null
 Check "relative file" "2 line one / line two|0 1" ($out -join "|")
+$out = & $rexx drives.rex 2>$null
+Check "another drive, SysFileTree, directory()" "on C 1|0 1|1|1" ($out -join "|")
+$out = & $rexx cmds.rex 2>$null
+Check "commands" "3|1 o|""a b""|127" ($out -join "|")
+$out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
+Check "program by absolute Windows path" "[abs]" ($out -join "|")
 Info "what it sees" info.rex
 Info "commands" cmd.rex
 Info "BSF4ooRexx" ..\bsf\basics.rex
