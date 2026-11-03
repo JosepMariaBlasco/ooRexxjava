@@ -66,7 +66,12 @@ neither ours:
   interpreter for an object above 1,000 MB: `numeric digits 9` and a 10-digit
   `identityHash` (`Error 93.928: D2X value must be a valid whole number`), which
   hides the condition being reported. A copy with one more digit, found first
-  through `REXX_PATH`, shows it.
+  through `REXX_PATH`, shows it. **Fixed in BSF4ooRexx r1131** (Rony,
+  3/11/2026; `build.sh` takes it since then): 10,201 threads with 256 KB
+  stacks now report the real condition (`48.1 ERROR CREATING THREAD` at the
+  `reply`), no 93.928 (16,434 assertions, 1 failure, 235 s); with
+  `REXXJVM_THREADSTACK=128K` the group passes (20,009 assertions, 0 failures,
+  246 s, the slow way described next).
 - Sometimes nearly all of the 100 controllers wait out their 201 s and fail
   their "active thread counter" assertion (raised as SYNTAX 93.964 in the Java
   thread, so not counted as a failure; the run ends with fewer assertions,

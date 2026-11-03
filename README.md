@@ -51,7 +51,11 @@ JVM, `suite-jvm-r13358-server.csv`): 404 of 405 in 3 min 20 s, 24,440 tests,
 again only `rxsubcom`; it and `ProcessInvocation` (60 tests, with the six new
 `Terminate()` cases of #2107, `testbinaries/detach_root_terminate`, one more
 tool of `dist-test`'s `rexx.wasm`) pass without the warm JVM
-(`suite-jvm-r13358-alone-rxsubcom-processinvocation.csv`).
+(`suite-jvm-r13358-alone-rxsubcom-processinvocation.csv`). With BSF4ooRexx
+r1131 and commands looked up in their own `PATH` (the warm JVM had looked them
+up in its own, that of whoever started it: hence `rxsubcom`), through the warm
+JVM (`suite-jvm-r13358-bsf1131-server.csv`, 03/11/2026): **405 of 405** in
+4 min 4 s, 24,440 tests, 0 failures, 0 errors.
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
@@ -267,7 +271,7 @@ rexx program.rex        # the first time ~2 s (the server starts); then ~0.1 s
 
 For now it is meant for running many short programs, ooRexx's test suite above
 all: through it the suite takes 4 minutes and a half instead of about 21
-(404/405 groups pass; natively 2 min 24 s: about twice as fast), and the Rexx Parser checking one of its files about
+(405/405 groups pass; natively 2 min 24 s: about twice as fast), and the Rexx Parser checking one of its files about
 4 s instead of 9 (natively 2.4). What differs from `rexxj`: programs share one JVM (a crash or an
 `OutOfMemoryError` affects all of them); commands a program runs read the
 client's input from the start of a regular file; and BSF4ooRexx's Java side is
