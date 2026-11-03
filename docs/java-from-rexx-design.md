@@ -456,10 +456,56 @@ suite) needs the launcher's state per run first; this is that step.
   unchanged: the repository's tests, `tests/halt.sh`, `tests/embed` (41),
   `tests/jsr223` (21), `tests/jni` (100), `tests/bsf`, BSF4ooRexx's
   `testUnits` (same counts) and ooRexx's suite: 400/405 (`results/suite-jvm-r13346-runs.csv`, two groups at a time; v9 398/405): left only the timing ones, `ProcessInvocation` over 300 s, `TRACE`, `TRACE_TraceObject`, `scclient`, `sfclient`.
-- **Next** (Josep Maria decides): a server that keeps a warm JVM, and a small
-  native `rexx` client (arguments, environment, directory, its standard
-  streams as `/proc/<pid>/fd/0,1,2`, signals, exit code), first only for the
-  suite; a class loader per run for BSF4ooRexx's Java side.
+
+### The warm JVM and its client, as built (03/11/2026)
+
+The first use of runs: a minimal server and client, meant for the suite first.
+
+- **`rexxjvm.Server`** (`host/.../Server.java`): a Unix socket per user and
+  build, one server per socket (`SOCKET.lock`), a thread and a hosted `Run`
+  per connection; idle for 15 minutes with nothing running, it exits. The
+  protocol is in its javadoc: the client's arguments, environment, directory,
+  pid and ppid, and the kind of its three standard streams (terminal, regular
+  file and its offset, other); then signals; then the exit code.
+- **The standard streams** are the client's own: the server opens
+  `/proc/PID/fd/0`, `1`, `2` (Linux; the same user may), so pipes, terminals
+  and files behave as they would natively, with no copying. Output to a
+  regular file is appended, and the client moves its offset to the end when
+  the program ends, so `( echo a; rexx p; echo b ) > f` comes out in order;
+  input from a regular file starts at the client's offset and the client's
+  offset moves to where the program left it. Commands the program runs get the
+  same files (`Run.Options.cmdIn/Out/Err`, `ProcessBuilder.Redirect`): their
+  output interleaves with the program's as natively. Not exact: a command's
+  input from a regular file starts at its beginning; and `stdout`/`stderr` to
+  the same file interleave unbuffered (natively stdout is buffered: the order
+  differs from native, as `rexxj`'s does too, `tests/err.rex`).
+- **`rexxjs`** (`client/rexxjs.c`, ~330 lines of C): finds or starts the
+  server (detached, `setsid`, its output to `SOCKET.log`), sends the request,
+  forwards SIGINT, SIGTERM and SIGHUP (unless ignored, as natively) as `'S'`,
+  and exits with the program's code. It falls back to `rexxj` for what it
+  cannot do: a standard stream closed or a socket, the API server's daemon,
+  no server. `dist/rexxj` execs it when `REXXJ_SERVER` is set, so `rexx`,
+  `rexxc`, `rxqueue`, `rxsubcom` and every `rexx` a program starts go through
+  the server too.
+- **Found by it:** `Jni.functions()` filled a shared list unsynchronized; two
+  runs built at once could get half of the imports ("unknown import
+  jni.attach"). Now synchronized, and `tests/multirun` starts with three runs
+  built at once (10 checks).
+- **Results** (2 cores, Java 21, the suite as `orxt`, two groups at a time,
+  300 s limit): **404/405 in 4 min 24 s** (`results/suite-jvm-r13346-server.csv`;
+  the groups' times add up to 430 s), against 400/405 and about 21 minutes
+  with `rexxj` (2,495 s). `ProcessInvocation`, over 300 s every time until now,
+  passes in 22 s; `scclient`, `sfclient` and `TRACE_TraceObject` pass too. Left:
+  `TRACE`'s `TEST_TRACE_LABEL_WITH_FORWARD`, as with `rexxj`. The Rexx
+  Parser 0.7's `elident` on `Scanner.cls` and `Clauses.cls`: 3.9–4.8 s
+  through the server once warm (the first 4.8–8.1 s), 8.2–9.8 s with `rexxj`,
+  2.2–2.6 s natively. `say "hi"`: ~1.2–2 s the first time (the server
+  starts), then 100–140 ms. BSF4ooRexx works through it (`tests/bsf/basics.rex`).
+- **Left for a product version** (Josep Maria decides): a class loader per run
+  for BSF4ooRexx and the client's `CLASSPATH` (now the server's class path,
+  and foreign Java threads enter the primary run); isolation (a run that
+  exhausts the Java heap affects all); macOS (no `/proc`: the streams would
+  have to be relayed); stopping or replacing the server explicitly.
 
 ## Other implications
 

@@ -100,8 +100,16 @@ cp "$HERE/host/target/rexxj.jar" dist/
 # the jar is also the agent that gives BSF4ooRexx's native methods to the module (Natives)
 # $REXXJ_JAVA_OPTIONS: more options for the JVM, e.g. -XX:-DontCompileHugeMethods for long
 # runs (README.md, "Speed")
-printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\nPATH="$D:$PATH" exec java -Xss16m $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
+# $REXXJ_SERVER: run the program in a warm JVM through rexxjs, the native client of
+# rexxjvm.Server (client/rexxjs.c; README.md, "A warm JVM: rexxjs"), if it was built
+printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\n[ -n "$REXXJ_SERVER" ] && [ -x "$D/rexxjs" ] && exec "$D/rexxjs" "$@"\nPATH="$D:$PATH" exec java -Xss16m $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
+# rexxjs: Linux only (it opens the client's streams as /proc/PID/fd/N); without a C
+# compiler, or elsewhere, there is none and rexxj runs as usual
+rm -f dist/rexxjs
+if [ "$(uname -s)" = Linux ] && command -v cc >/dev/null; then
+  cc -O2 -Wall -o dist/rexxjs "$HERE/client/rexxjs.c" || rm -f dist/rexxjs
+fi
 # the usual names, as commands (the test suite runs "rexx ..."): rexx is rexxj; the
 # utilities are in the interpreter's binary (multi-call, rexx --orx-wasm-TOOL)
 printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" "$@"\n' > dist/rexx

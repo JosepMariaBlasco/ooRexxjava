@@ -155,15 +155,21 @@ final class Host {
         boolean out = (flags & OUTPUT) != 0, err = (flags & ERROR) != 0, same = (flags & SAME) != 0;
         // A run with standard streams of its own (a hosted run's) cannot give them to the
         // process: the command's output is copied to them, and it reads no input.
+        // A run can say where commands read and write (a server: its client's streams).
         Run run = Run.current();
-        OutputStream runOut = run == null ? null : run.out, runErr = run == null ? null : run.err;
+        ProcessBuilder.Redirect toIn = run == null ? null : run.cmdIn;
+        ProcessBuilder.Redirect toOut = run == null ? null : run.cmdOut, toErr = run == null ? null : run.cmdErr;
+        OutputStream runOut = run == null || toOut != null ? null : run.out;
+        OutputStream runErr = run == null || toErr != null ? null : run.err;
         boolean ownIn = run != null && run.in != null;
         ProcessBuilder.Redirect noInput = ProcessBuilder.Redirect.from(new File("/dev/null"));
         pb.redirectInput((flags & INPUT) != 0 ? ProcessBuilder.Redirect.PIPE
-                         : ownIn ? noInput : ProcessBuilder.Redirect.INHERIT);
-        pb.redirectOutput(out || runOut != null ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
+                         : toIn != null ? toIn : ownIn ? noInput : ProcessBuilder.Redirect.INHERIT);
+        pb.redirectOutput(out || runOut != null ? ProcessBuilder.Redirect.PIPE
+                          : toOut != null ? toOut : ProcessBuilder.Redirect.INHERIT);
         if (out && same) pb.redirectErrorStream(true);
-        else pb.redirectError(err || runErr != null ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
+        else pb.redirectError(err || runErr != null ? ProcessBuilder.Redirect.PIPE
+                              : toErr != null ? toErr : ProcessBuilder.Redirect.INHERIT);
         byte[] input = (flags & INPUT) != 0 && inputLength > 0 ? m.readBytes(inputP, inputLength) : new byte[0];
 
         // what the interpreter wrote so far must come before the command's output

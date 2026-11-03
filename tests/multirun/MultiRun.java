@@ -83,8 +83,29 @@ public class MultiRun {
         List<WeakReference<Object>> memories = new ArrayList<>();
         int threadsBefore = wasmThreads();
 
-        // one after another: the first pays for the JIT, the others do not
+        // the very first runs, built at once: the imports must not be half made
+        // (Jni.functions filled a shared list unsynchronized: found by the suite, 03/11/2026)
         Path hi = program("hi.rex", "say 'hi' arg(1)\n");
+        ExecutorService first = Executors.newFixedThreadPool(3, task -> {
+            Thread t = new Thread(null, task, "multirun-first", Run.STACK);
+            t.setDaemon(true);
+            return t;
+        });
+        List<Future<Boolean>> firsts = new ArrayList<>();
+        for (int i = 0; i < 3; i++) {
+            String tag = "f" + i;
+            firsts.add(first.submit(() -> {
+                Result x = run(options(hi, tag));
+                return x.rc == 0 && x.out.equals("hi " + tag + "\n");
+            }));
+        }
+        boolean firstOk = true;
+        for (Future<Boolean> f : firsts) {
+            try { firstOk &= f.get(300, TimeUnit.SECONDS); } catch (ExecutionException x) { firstOk = false; }
+        }
+        check(firstOk, "the first 3 runs of the JVM, built at once");
+
+        // one after another: the first pays for the JIT, the others do not
         List<Long> times = new ArrayList<>();
         boolean allOk = true;
         for (int i = 0; i < 12; i++) {

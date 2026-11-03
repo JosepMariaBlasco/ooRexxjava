@@ -125,6 +125,12 @@ final class Run {
         boolean process;                      // the run owns the JVM
         boolean embedded;                     // the module of a Rexx (embedded mode)
         long pid = -1, ppid = -1;             // getpid() and getppid(); -1: the JVM's
+        /**
+         * Where the commands the program runs read and write, if not the run's streams
+         * (a server gives its client's: /proc/PID/fd/0, 1, 2); null: the run's streams
+         * (the process's are inherited; a hosted run's own are copied, and no input).
+         */
+        ProcessBuilder.Redirect cmdIn, cmdOut, cmdErr;
     }
 
     // ---- the run ------------------------------------------------------------------------
@@ -156,6 +162,8 @@ final class Run {
     /** The run's standard streams; null: the process's. */
     final InputStream in;
     final OutputStream out, err;
+    /** Where commands read and write instead (Options.cmdIn, cmdOut, cmdErr); null: as above. */
+    final ProcessBuilder.Redirect cmdIn, cmdOut, cmdErr;
     final Memory memory;
     final ImportValues imports;
     private final WasiPreview1 wasi;
@@ -192,6 +200,9 @@ final class Run {
         in = o.in;
         out = o.out;
         err = o.err;
+        cmdIn = o.cmdIn;
+        cmdOut = o.cmdOut;
+        cmdErr = o.cmdErr;
 
         // the module, and its argv: a .wasm file first, else the one translated at build time
         List<String> args = o.args;

@@ -23,7 +23,7 @@ CMD=${1:?usage: saved-build.sh manifest|save|publish|fetch [WORK]}
 WORK=${2:-/home/claude/work}
 BRANCH=saved-build
 # what the build is made from: every tracked file it reads, by content
-INPUTS="build.sh build-test.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host"
+INPUTS="build.sh build-test.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host client"
 
 manifest() {
   echo "work $WORK"

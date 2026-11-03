@@ -232,6 +232,36 @@ and what a server for `rexx` still needs, are in
 [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md) ("Runs:
 several in one JVM"); the test is `tests/multirun/`. `Run` is not public yet.
 
+## A warm JVM: `rexxjs`
+
+With `REXXJ_SERVER` set, `rexxj` (and so `rexx`, `rexxc`, `rxqueue`,
+`rxsubcom`, which run it) hands the program to `rexxjs`, a small native client
+(`client/rexxjs.c`, Linux, built by `build.sh` when there is a C compiler).
+`rexxjs` sends its arguments, environment, current directory and pid to
+`rexxjvm.Server`, a JVM that keeps the module warm and runs each program as a
+run of its own (above); the server opens the client's standard streams itself
+(`/proc/PID/fd/0`, `1`, `2`), the client sends its signals on (a HALT, as
+natively) and exits with the program's exit code. The first `rexxjs` starts the
+server, detached (`$TMPDIR/.ooRexx-jvm-USER-server-KEY`, one per user and
+build, its output in `….log`); it ends after 15 minutes with nothing running
+(`-Drexxjvm.server.idle`, seconds, in `REXXJ_JAVA_OPTIONS`). When it cannot do
+that (no server can start, a standard stream that is closed or a socket),
+`rexxjs` runs `rexxj` as usual.
+
+```bash
+export REXXJ_SERVER=1
+rexx program.rex        # the first time ~2 s (the server starts); then ~0.1 s
+```
+
+For now it is meant for running many short programs, ooRexx's test suite above
+all: through it the suite takes 4 minutes and a half instead of about 21
+(404/405 groups pass), and the Rexx Parser checking one of its files about
+4 s instead of 9 (natively 2.4). What differs from `rexxj`: programs share one JVM (a crash or an
+`OutOfMemoryError` affects all of them); commands a program runs read the
+client's input from the start of a regular file; and BSF4ooRexx's Java side is
+shared by the programs (the class path is the server's, not each client's
+`CLASSPATH`).
+
 ## Speed
 
 `rexxcps`, 2 cores, Java 21: about 1.9–2.0 M clauses/s; natively, ooRexx
@@ -295,6 +325,7 @@ per thread").
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
+| `client/` | `rexxjs.c`, the native client of the warm JVM ("A warm JVM: `rexxjs`"). |
 | `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Chicory's compiler, README "Speed"). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |

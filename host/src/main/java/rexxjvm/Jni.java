@@ -561,7 +561,8 @@ final class Jni {
 
     private static int i(long[] a, int n) { return (int) a[n]; }
 
-    static List<HostFunction> functions() {
+    /** The imports, built once (synchronized: runs are built on several threads at once). */
+    static synchronized List<HostFunction> functions() {
         if (!fns.isEmpty()) return fns;
 
         // classes and objects
