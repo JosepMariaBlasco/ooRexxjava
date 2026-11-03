@@ -202,7 +202,8 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 - **Java API** (`host/.../Rexx.java`): `Rexx.start()`,
   `rexx.newInterpreter()`, `callProgram(file, args...)`,
   `eval(code, args...)`, `close()`; conditions as `Rexx.RexxException`.
-  One module per JVM (the launcher's state is static). No
+  Since 03/11/2026 each `Rexx.start()` is a module of its own (a `Run`, see
+  "Runs: several in one JVM"); before, one per JVM. No
   `System.exit` and no signals in this mode.
 - **Results** (`tests/embed/`, compiled machine, 2 cores): start-up 0.6 s
   (the translated module's first `Instance` and the image), then ~1 ms per
@@ -296,7 +297,7 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   missing).
 - **Threads.** A native method called on a thread that is running wasm code
   (Rexx calls Java, which calls back: a `Comparator` written in Rexx) runs on
-  that thread's `Instance` (`RunWasm.current`). Called on any other Java
+  that thread's `Instance` (`Run.INSTANCE`; `RunWasm.current` before 03/11/2026). Called on any other Java
   thread (a `java.lang.Thread`, Swing's), it is a foreign entry, as in the
   embedded mode: the dispatcher, which `JNI_CreateJavaVM` now starts beside
   an ordinary program (`orxWasiStartDispatcher`), creates a pthread and
@@ -378,7 +379,7 @@ exist. Two changes, in Java only:
 
 - **The module starts by itself.** `Natives.call`, on a Java thread that is not
   running wasm code, calls `Rexx.startIfNeeded()` before the foreign entry: if
-  nothing has loaded the module (`RunWasm.module` null, no `Rexx.current`), it
+  nothing has started a run (no `Run.primary()`; before 03/11/2026, `RunWasm.module` null), it
   is started in the embedded mode, as `Rexx.start()` does. Beside an ordinary
   program, or once started, it does nothing. The host names no class of ours.
 - **`BSF.CLS` is found without `PATH`.** In the embedded mode the module's
@@ -397,6 +398,68 @@ ms (about 19 times less; about 16 without the `Instance`s, the ratio of
 interpreter's raw speed is what matters. Natively, BSF4ooRexx's `testUnits`
 give exactly our counts, and the errors seen with their old framework too
 (`tests/bsf/README.md`).
+
+## Runs: several in one JVM, as built (03/11/2026)
+
+Why: a JVM that runs one Rexx program and exits pays, every time, about a
+second of start-up and several more of JIT warm-up (README, "Speed"; ooRexx's
+suite is mostly that: median 4 s per group, and the groups that start `rexx`
+as a process are 40% of its time). Run again in a JVM that is already warm,
+with a new memory and new `Instance`s, `say "hi"` takes 40–90 ms instead of
+about 950, and the Rexx Parser's `elident` on `Scanner.cls` 4.4 s instead of
+11.2 (natively 2.3–2.6). A JVM that serves many runs (a server for `rexx`, the
+suite) needs the launcher's state per run first; this is that step.
+
+- **Shared by the JVM:** the module and its machine factory
+  (`Run.Module`, translated once: the code the JIT compiles serves every run),
+  the mini-JNI's object table (handles are unique) and its method and field
+  ids, `FileSys`'s probe of the file system.
+- **A run's own (`host/.../Run.java`):** its arguments, environment, current
+  directory and standard streams (its WASI); its linear memory; its imports,
+  which find their run as `Run.current()` (a thread-local set wherever wasm
+  code runs: `Run.runOn`); its threads and thread ids; its signals; its
+  foreign entries (`Entries.java`: the dispatcher's queue, `embed_next`,
+  `embed_run`, the hand-over in thread-spawn, which were static in
+  `Rexx`); the module's `JNIEnv`; and what it opened, closed when it ends:
+  sockets (`Net`), connections to the API server (`RxApi`), JNI global and
+  weak references (`Jni.releaseRun`). `getpid`/`getppid` can be given
+  (`Run.Options.pid`, `ppid`).
+- **Two kinds.** A *process* run owns the JVM: `rexxj` (`RunWasm`, now only
+  that), unchanged: `exit` from any thread is `System.exit`, the process's
+  signals are its (`Host.installSignals(run)`), commands inherit the process's
+  standard streams. A *hosted* run does not: `exit` ends the run
+  (`Run.end`), its signals come from its host (`Run.signal`), and commands
+  write to the run's streams (copied; they read no input). The embedded mode
+  is hosted, but an `exit` there is only reported, as before.
+- **Ending a hosted run** (`Run.end`, also from outside, as a server will need
+  when its client dies): the run's threads are interrupted (Chicory checks the
+  interruption on every call and loop; the launcher's waits are
+  interruptible), the dispatcher gets -1, what it opened is closed, WASI is
+  closed (the host's streams are not: they are wrapped), and the memory is
+  left to the GC (`FlatMemory`'s cleaner frees the block). `start()` then
+  returns the run's exit code; `awaitThreads` waits for its threads.
+- **Foreign entries without a run.** A `native` method of BSF4ooRexx called on
+  a Java thread that is not running wasm code enters the *primary* run (the
+  first one started, `Run.primary()`), starting the embedded mode if there is
+  none, as before. With several runs, nothing says which one such a thread
+  means; a run per class loader would (later, for the server).
+- **Fixed on the way.** `Natives` cached each `Instance`'s exports in a
+  `WeakHashMap` keyed by the `Instance`, whose values refer to it: no entry was
+  ever freed, so every foreign entry (about 6.7 per JSR-223 `invokeFunction`)
+  kept its `Instance` alive. Now a per-thread cache.
+- **Results** (`tests/multirun/`, 2 cores, Java 21): 9 checks, all pass: 12
+  runs one after another (744 ms the first, 60–119 ms the others), each its
+  own output; the exit code; environment, current directory and a command's
+  output; standard input and error; 20 runs on 4 threads at once; a run with
+  two threads looping, ended from outside in 2 ms with no threads left; SIGINT
+  as a HALT; no wasm threads left and every run's memory collected. `rexxj`
+  unchanged: the repository's tests, `tests/halt.sh`, `tests/embed` (41),
+  `tests/jsr223` (21), `tests/jni` (100), `tests/bsf`, BSF4ooRexx's
+  `testUnits` and ooRexx's suite (README, "Several runs in one JVM").
+- **Next** (Josep Maria decides): a server that keeps a warm JVM, and a small
+  native `rexx` client (arguments, environment, directory, its standard
+  streams as `/proc/<pid>/fd/0,1,2`, signals, exit code), first only for the
+  suite; a class loader per run for BSF4ooRexx's Java side.
 
 ## Other implications
 

@@ -222,20 +222,30 @@ public final class Natives {
     /** What the rewritten classes call instead of System.loadLibrary: the library is in the module. */
     public static void loadLibrary(String name) {}
 
-    private static final Map<Instance, Map<Integer, ExportFunction>> exports =
-        Collections.synchronizedMap(new WeakHashMap<>());
-    private static volatile int env;   // the module's JNIEnv *
+    /**
+     * The exports this thread's Instance has looked up, by native method: an Instance is
+     * used by one thread, and lives while the thread runs wasm code. (A map keyed by
+     * Instance kept every Instance alive: its exports refer to it.)
+     */
+    private static final class ExportCache {
+        final Instance inst;
+        final Map<Integer, ExportFunction> byId = new HashMap<>();
+        ExportCache(Instance inst) { this.inst = inst; }
+    }
+
+    private static final ThreadLocal<ExportCache> exports = new ThreadLocal<>();
 
     /** The body of every rewritten native method. */
     public static Object call(int id, Object self, Object[] args) {
         Info info = infos.get(id);
-        Instance inst = RunWasm.current.get();
+        Instance inst = Run.INSTANCE.get();
         if (inst == null) {
             // a Java thread that is not running wasm code: a pthread of the module is
-            // handed to it (Rexx.foreign), and the call runs there, still on this thread.
-            // A Java host that never started the module (JSR-223): start it now.
-            Rexx.startIfNeeded();
-            Object[] out = Rexx.foreign(i -> {
+            // handed to it (a foreign entry), and the call runs there, still on this
+            // thread. Which module: the run that serves such threads (the first one);
+            // a Java host that never started the module (JSR-223): it is started now.
+            Run run = Rexx.primaryOrStart();
+            Object[] out = run.entries.foreign(i -> {
                 try {
                     return new Object[] { call(id, self, args), null };
                 } catch (Throwable x) {
@@ -245,9 +255,12 @@ public final class Natives {
             if (out[1] != null) throwUnchecked((Throwable) out[1]);
             return out[0];
         }
-        ExportFunction f = exports.computeIfAbsent(inst, k -> new ConcurrentHashMap<>())
-            .computeIfAbsent(id, k -> export(inst, info));
-        if (env == 0) env = (int) inst.export("orx_jni_env").apply()[0];
+        ExportCache cache = exports.get();
+        if (cache == null || cache.inst != inst) exports.set(cache = new ExportCache(inst));
+        ExportFunction f = cache.byId.computeIfAbsent(id, k -> export(inst, info));
+        Run run = Run.current();
+        int env = run.jniEnv;
+        if (env == 0) run.jniEnv = env = (int) inst.export("orx_jni_env").apply()[0];
         int depth = Jni.enterNative();
         Object result;
         try {

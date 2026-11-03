@@ -100,7 +100,19 @@ final class Jni {
     }
 
     static int global(Object o) {
-        return o == null ? 0 : alloc(o, GLOBAL, 0);
+        return o == null ? 0 : alloc(o, GLOBAL, runOwner());
+    }
+
+    /** A global or weak reference belongs to the run that made it: -(run id); 0 if none. */
+    static int runOwner() {
+        Run r = Run.current();
+        return r == null ? 0 : -r.id;
+    }
+
+    /** A run ended: the global and weak references it made are released. */
+    static synchronized void releaseRun(int runId) {
+        for (int h = 1; h < top; h++)
+            if ((kinds[h] == GLOBAL || kinds[h] == WEAK) && owner[h] == -runId) release(h);
     }
 
     // ---- threads: frames and the pending exception -------------------------------------
@@ -579,7 +591,7 @@ final class Jni {
         fn("new_ref", 2, (in, m, a) -> {
             Object o = get(i(a, 0));
             int k = i(a, 1);
-            return k == LOCAL ? local(o) : o == null ? 0 : alloc(o, (byte) k, 0);
+            return k == LOCAL ? local(o) : o == null ? 0 : alloc(o, (byte) k, runOwner());
         });
         fn("delete_ref", 1, null, (in, m, a) -> { release(i(a, 0)); return 0; });
         fn("ref_type", 1, (in, m, a) -> refType(i(a, 0)));

@@ -81,6 +81,8 @@ final class RxApi {
     }
 
     static int processId(boolean parent) {
+        Run r = Run.current();
+        if (r != null && (parent ? r.ppid : r.pid) >= 0) return (int) (parent ? r.ppid : r.pid);
         ProcessHandle p = ProcessHandle.current();
         long pid = parent ? p.parent().map(ProcessHandle::pid).orElse(1L) : p.pid();
         return (int) pid;
@@ -100,6 +102,8 @@ final class RxApi {
     static int register(Object channel) {
         int h = nextHandle.getAndIncrement();
         handles.put(h, channel);
+        Run r = Run.current();
+        if (r != null) r.apiHandles.add(h);
         return h;
     }
 
@@ -199,6 +203,8 @@ final class RxApi {
     }
 
     static void close(int h) {
+        Run r = Run.current();
+        if (r != null) r.apiHandles.remove(h);
         Object c = handles.remove(h);
         try {
             if (c instanceof SocketChannel) ((SocketChannel) c).close();
@@ -232,7 +238,8 @@ final class RxApi {
             cmd.add("-cp");
             cmd.add(new File(RxApi.class.getProtectionDomain().getCodeSource().getLocation().toURI()).getPath());
             cmd.add(RunWasm.class.getName());
-            if (RunWasm.wasmFile != null) cmd.add(RunWasm.wasmFile);
+            Run run = Run.current();
+            if (run != null && run.module.file != null) cmd.add(run.module.file);
             cmd.add("--orx-wasm-rxapi");
             ProcessBuilder pb = new ProcessBuilder(cmd).directory(new File("/"));
             pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));

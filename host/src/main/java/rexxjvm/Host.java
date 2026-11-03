@@ -58,7 +58,8 @@ final class Host {
     }
 
     /*
-     * The host's signals. SIGINT (Ctrl-C), SIGTERM and SIGHUP become a HALT in the
+     * The host's signals, for a process run (a hosted run gets them from its host,
+     * Run.signal). SIGINT (Ctrl-C), SIGTERM and SIGHUP become a HALT in the
      * running program, as natively: the module's signal thread (compat/orx_wasi_host.c)
      * waits here for them and calls the interpreter's orxWasmSignal(). Until that thread
      * waits, which is once the interpreter has started, a signal ends the process as
@@ -67,11 +68,8 @@ final class Host {
      * default. Through sun.misc.Signal (jdk.unsupported), by reflection; without it,
      * there are no signals for the program, and the JVM's default stays.
      */
-    static final java.util.concurrent.LinkedBlockingQueue<Integer> signals =
-        new java.util.concurrent.LinkedBlockingQueue<>();
-    static volatile boolean signalsWanted, signalWaiting;
-
-    static void installSignals(List<String> argv) {
+    static void installSignals(Run run) {
+        List<String> argv = run.argv;
         if (argv.size() > 1 && argv.get(1).startsWith("--orx-wasm-")) return;
         try {
             Class<?> signal = Class.forName("sun.misc.Signal");
@@ -79,13 +77,7 @@ final class Host {
             Object handler = java.lang.reflect.Proxy.newProxyInstance(Host.class.getClassLoader(),
                 new Class<?>[] { handlerType }, (proxy, method, args) -> {
                     if (!method.getName().equals("handle")) return null;
-                    int number = (Integer) signal.getMethod("getNumber").invoke(args[0]);
-                    if (signalWaiting) {
-                        signals.offer(number);
-                    } else {
-                        System.out.flush();
-                        Runtime.getRuntime().halt(128 + number);
-                    }
+                    run.signal((Integer) signal.getMethod("getNumber").invoke(args[0]));
                     return null;
                 });
             for (String name : new String[] { "INT", "TERM", "HUP" }) {
@@ -96,7 +88,7 @@ final class Host {
                     // not this one here (the JVM may use it, or the system lack it)
                 }
             }
-            signalsWanted = true;
+            run.signalsWanted = true;
         } catch (ReflectiveOperationException | RuntimeException | LinkageError x) {
             // no sun.misc.Signal: no signals for the program
         }
@@ -104,10 +96,11 @@ final class Host {
 
     /** The next signal for the module's signal thread; -1: there are none to wait for. */
     static int signalWait() {
-        if (!signalsWanted) return -1;
-        signalWaiting = true;
+        Run run = Run.current();
+        if (run == null || !run.signalsWanted || run.ended()) return -1;
+        run.signalWaiting = true;
         try {
-            return signals.take();
+            return run.signals.take();
         } catch (InterruptedException x) {
             Thread.currentThread().interrupt();
             return -1;
@@ -160,15 +153,22 @@ final class Host {
         }
         if (cwdP != 0) pb.directory(new File(m.readCString(cwdP, StandardCharsets.UTF_8)));
         boolean out = (flags & OUTPUT) != 0, err = (flags & ERROR) != 0, same = (flags & SAME) != 0;
-        pb.redirectInput((flags & INPUT) != 0 ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
-        pb.redirectOutput(out ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
+        // A run with standard streams of its own (a hosted run's) cannot give them to the
+        // process: the command's output is copied to them, and it reads no input.
+        Run run = Run.current();
+        OutputStream runOut = run == null ? null : run.out, runErr = run == null ? null : run.err;
+        boolean ownIn = run != null && run.in != null;
+        ProcessBuilder.Redirect noInput = ProcessBuilder.Redirect.from(new File("/dev/null"));
+        pb.redirectInput((flags & INPUT) != 0 ? ProcessBuilder.Redirect.PIPE
+                         : ownIn ? noInput : ProcessBuilder.Redirect.INHERIT);
+        pb.redirectOutput(out || runOut != null ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
         if (out && same) pb.redirectErrorStream(true);
-        else pb.redirectError(err ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
+        else pb.redirectError(err || runErr != null ? ProcessBuilder.Redirect.PIPE : ProcessBuilder.Redirect.INHERIT);
         byte[] input = (flags & INPUT) != 0 && inputLength > 0 ? m.readBytes(inputP, inputLength) : new byte[0];
 
         // what the interpreter wrote so far must come before the command's output
-        System.out.flush();
-        System.err.flush();
+        if (run != null) run.flush();
+        else { System.out.flush(); System.err.flush(); }
         Process p;
         try {
             p = pb.start();
@@ -181,7 +181,9 @@ final class Host {
             feeder = pump(null, p.getOutputStream(), input);
         }
         if (out) outReader = pump(p.getInputStream(), outBytes, null);
+        else if (runOut != null) outReader = pump(p.getInputStream(), runOut, null);
         if (err && !(out && same)) errReader = pump(p.getErrorStream(), errBytes, null);
+        else if (!(out && same) && runErr != null) errReader = pump(p.getErrorStream(), runErr, null);
         int rc;
         try {
             rc = p.waitFor();

@@ -168,9 +168,9 @@ calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
 the calling Java thread, attached to the instance) is in
 [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Chicory's
 frames live on the calling thread's Java stack: give the JVM `-Xss16m` or
-more (`dist/rexxj` does), or deep Rexx recursion fails. For long runs,
-`-XX:-DontCompileHugeMethods` too (README, "Speed"). Strings only: Java objects cross through BSF4ooRexx (below).
-One module per JVM for now. Tests: `tests/embed/`.
+more (`dist/rexxj` does), or deep Rexx recursion fails. Strings only: Java objects cross through BSF4ooRexx (below).
+Each `Rexx.start()` is a module of its own, with its own memory, in the same
+JVM (see "Several runs in one JVM"). Tests: `tests/embed/`.
 
 ## Java from Rexx: BSF4ooRexx
 
@@ -217,6 +217,20 @@ java -Xss16m -javaagent:dist/rexxj.jar -cp dist/rexxj.jar:dist/bsf4oorexx.jar:. 
 
 Test and its notes in `tests/jsr223/` (about 20 ms per `invokeFunction` for
 now, 1 ms natively: mostly the interpreter's speed).
+
+## Several runs in one JVM
+
+The launcher keeps everything a program needs in a run (`host/.../Run.java`):
+its arguments, environment, current directory, standard streams, linear
+memory, threads, signals, and what it opens; the module translated to JVM
+bytecode is shared, so the code the JIT compiled for one run serves the next.
+`rexxj` is one run that owns the JVM, as before. A Java host can run many
+programs in one JVM, one after another or at once, and end any of them; run
+again in a warm JVM, `say "hi"` takes 40–90 ms instead of about a second, and
+the Rexx Parser checking one of its files 4.4 s instead of 11.2. The design,
+and what a server for `rexx` still needs, are in
+[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md) ("Runs:
+several in one JVM"); the test is `tests/multirun/`. `Run` is not public yet.
 
 ## Speed
 

@@ -149,6 +149,7 @@ final class Net {
         }
         int h = next.getAndIncrement();
         socks.put(h, s);
+        own(h);
         return h;
     }
 
@@ -296,6 +297,7 @@ final class Net {
                     n.client = c;
                     int nh = next.getAndIncrement();
                     socks.put(nh, n);
+                    own(nh);
                     putAddress(m, out, c.getRemoteAddress());
                     return nh;
                 }
@@ -430,7 +432,15 @@ final class Net {
         try { if (s.datagram != null) s.datagram.close(); } catch (IOException x) { /* gone */ }
     }
 
+    /** The current run opened socket h: it is closed when the run ends, if not before. */
+    static void own(int h) {
+        Run r = Run.current();
+        if (r != null) r.sockets.add(h);
+    }
+
     static int close(int h) {
+        Run r = Run.current();
+        if (r != null) r.sockets.remove(h);
         Sock s = socks.remove(h);
         if (s == null) return -EBADF;
         closeQuietly(s);
