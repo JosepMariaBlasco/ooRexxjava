@@ -85,7 +85,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ./build.sh [work-directory]      # default: ~/oorexx-jvm
 ```
 
-Needs `svn`, `git`, `cmake`, `make`, Java 11 or later and Maven, and network
+Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
 access (wasi-sdk 34, ooRexx trunk r13358 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
@@ -296,7 +296,13 @@ r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
   official jar, which is not touched. 0.63 to 1.88 M (with Chicory). Reported to
   Endive (bytecodealliance/endive#273), which means to fix it.
 - **`FlatMemory`**: the linear memory as one flat block outside the heap (see
-  "Threads and their stacks").
+  "Threads and their stacks"), with `sun.misc.Unsafe`. JDK 24 and later warn
+  about it on its first use (JEP 498); `REXXJ_JAVA_OPTIONS=--sun-misc-unsafe-memory-access=allow`
+  silences them. A JVM that refuses it (`=deny`, a later JDK's default) gets,
+  on Java 22 and later, the same memory through `java.lang.foreign` instead,
+  by itself, about a third slower (`-Drexxjvm.memory=mapped` asks for it;
+  `docs/java-from-rexx-design.md`). Build with Maven on JDK 22 or later for
+  that: `scripts/mvn22.sh`, which `build.sh` uses, finds one if there is.
 
 `-XX:-DontCompileHugeMethods`, which lifts HotSpot's limit for every method,
 no longer helps (1.75 M) and makes start-up slower; `REXXJ_JAVA_OPTIONS`

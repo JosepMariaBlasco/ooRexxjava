@@ -20,12 +20,31 @@
       <executions><execution><phase>package</phase><goals><goal>shade</goal></goals>
         <configuration><transformers><transformer implementation="org.apache.maven.plugins.shade.resource.ManifestResourceTransformer"><mainClass>rexxjvm.RunWasm</mainClass>
           <!-- the jar is also a Java agent (-javaagent:rexxj.jar): native methods implemented in the module, rexxjvm.Natives -->
-          <manifestEntries><Premain-Class>rexxjvm.Natives</Premain-Class><Agent-Class>rexxjvm.Natives</Agent-Class></manifestEntries></transformer></transformers></configuration>
+          <manifestEntries><Multi-Release>true</Multi-Release><Premain-Class>rexxjvm.Natives</Premain-Class><Agent-Class>rexxjvm.Natives</Agent-Class></manifestEntries></transformer></transformers></configuration>
       </execution></executions></plugin>
   </plugins></build>
   <!-- mvn package -Pembedded -Dwasm.file=/path/to/rexx.wasm: rexx.wasm translated to
        JVM bytecode at build time (Endive's build-time compiler) and embedded in the jar -->
   <profiles>
+    <!-- Built with JDK 22 or later: src/main/java22 compiled for Java 22 into the jar's
+         META-INF/versions/22 (a multi-release jar), so that Java 22+ can fall back to a
+         FlatMemory block without sun.misc.Unsafe when the JVM refuses it (rexxjvm.Blocks).
+         Built with an older JDK the jar has no such fallback, and stops working on a JVM
+         that denies Unsafe's memory access. build.sh picks a JDK 22+ for Maven if it finds one. -->
+    <profile>
+      <id>java22</id>
+      <activation><jdk>[22,)</jdk></activation>
+      <build><plugins>
+        <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-compiler-plugin</artifactId>
+          <executions><execution><id>java22</id><phase>compile</phase><goals><goal>compile</goal></goals>
+            <configuration>
+              <release>22</release>
+              <compileSourceRoots><compileSourceRoot>${project.basedir}/src/main/java22</compileSourceRoot></compileSourceRoots>
+              <multiReleaseOutput>true</multiReleaseOutput>
+            </configuration>
+          </execution></executions></plugin>
+      </plugins></build>
+    </profile>
     <profile>
       <id>embedded</id>
       <build>

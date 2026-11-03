@@ -363,6 +363,33 @@ and the wake-ups owed to them, per address). Wasm is little-endian: values
 are byte-swapped on a big-endian machine. `-Drexxjvm.memory=bytearray` goes
 back to `ByteArrayMemory`.
 
+`sun.misc.Unsafe` and later JDKs (3/11/2026). JDK 24 and later print a warning
+on `Unsafe`'s first memory access (JEP 498), and a later JDK will refuse it
+by default. `FlatMemory` is abstract, with all the logic (bounds, growth,
+atomics, `wait`/`notify`), and one subclass per kind of block, so that an
+access is still one bounds check and one load, the block's address a field of
+the same object: `UnsafeMemory` (as before), and, in the jar's
+`META-INF/versions/22` (a multi-release jar; `src/main/java22`, compiled only
+when Maven runs on JDK 22 or later, `scripts/mvn22.sh`), `MappedMemory`, with
+`java.lang.foreign` and no restricted method: a private (copy-on-write)
+mapping of a temp file, extended to the size and deleted at once, lazy like
+`malloc` (`Arena.allocate` zero-fills eagerly: 4 GB, 35 s; `FileChannel.map`
+refuses `/dev/zero`). `Blocks` picks: `UnsafeMemory` while the JVM allows it,
+the fastest; `MappedMemory` when the JVM denies it
+(`--sun-misc-unsafe-memory-access=deny`) or with `-Drexxjvm.memory=mapped`
+(`=unsafe` insists on `Unsafe`; Windows always `Unsafe`: a mapped file there
+cannot be deleted while open). The warning goes away with
+`--sun-misc-unsafe-memory-access=allow` in `REXXJ_JAVA_OPTIONS`. The price of
+`MappedMemory`, `rexxcps` on JDK 25 (2 cores, alternated runs, a slow day):
+1.10 M (1.07–1.13) against 1.73 M (1.65–1.81) with `UnsafeMemory`, about a
+third less: a `MemorySegment` checks every access (length, session, read-only),
+and the JIT cannot take those checks out of the module's huge methods; a
+segment in a `static final` field did not help (2.0–2.3 M against 2.8–3.0 M,
+another day). On JDK 21 the subclasses cost nothing (1.82 M against 1.79 M
+before them, alternated). The project's own tests (rexx programs, BSF4ooRexx,
+embedded mode, JSR-223, several runs in one JVM) pass on JDK 21, and on JDK 25
+with `deny`.
+
 Measured (2 cores, Java 21, with `-XX:-DontCompileHugeMethods`, README
 "Speed"): `rexxcps` 1.19–1.23 M clauses/s, against 0.99–1.05 M with
 `ByteArrayMemory` (runs alternated). 200 live threads with 8 MB stacks: 245 MB of resident memory in

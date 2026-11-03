@@ -1,6 +1,6 @@
 #!/bin/bash
 # Rebuild ooRexx for WASI (wasm32-wasip1-threads) and the Java launcher (Endive).
-# Needs: svn, git, cmake, make, Java 11+ and Maven, network for wasi-sdk 34, GitHub and Maven Central.
+# Needs: svn, git, cmake, make, Java 11+ (22+ for the jar's fallback without Unsafe) and Maven, network for wasi-sdk 34, GitHub and Maven Central.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
 WORK=${1:-$HOME/oorexx-jvm}
@@ -34,7 +34,7 @@ if [ ! -d oorexx ]; then
 fi
 # the Java launcher (Endive 1.2.0, Chicory's successor)
 "$HERE/scripts/endive-compiler.sh"   # Endive's compiler, patched (host/chicory-patch)
-(cd "$HERE/host" && mvn -q -B clean package -DskipTests)
+(cd "$HERE/host" && "$HERE/scripts/mvn22.sh" -q -B clean package -DskipTests)
 JAR=$HERE/host/target/rexxjvm-0.1.jar
 printf '#!/bin/sh\nexec java -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm
 C=$HERE/compat
@@ -93,7 +93,7 @@ rm -f dist/bsf4oorexx.jar && jar cf dist/bsf4oorexx.jar -C bsf-stage .
 mkdir -p dist/samples && find oorexx/samples -maxdepth 1 -type f ! -name CMakeLists.txt -exec cp {} dist/samples/ \;
 # rexxj.jar: the launcher with rexx.wasm translated to JVM bytecode at build time
 # (Chicory's build-time compiler), so that start-up does not translate it again
-(cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
+(cd "$HERE/host" && "$HERE/scripts/mvn22.sh" -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist/rexx.wasm")
 cp "$HERE/host/target/rexxj.jar" dist/
 # -Xss: Java threads the module did not create (Swing's, a pool's) may enter it, and
 # Chicory's frames live on their Java stack (prototypes/threads/README.md)
