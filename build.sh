@@ -9,7 +9,7 @@ mkdir -p "$WORK" && cd "$WORK"
 W=$WORK/wasi-sdk-34.0-x86_64-linux
 # oorexxwasm's generic WebAssembly layer (its 0001, the only patch a WASI build applies),
 # from a fixed commit (its HEAD moves with the family's revision)
-OOREXXWASM_REV=4639d9d959663cefeee32305288ef607e282f165
+OOREXXWASM_REV=7c53f17495fd5a1f94ff6a2178afa1bef6ee31c9
 if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; then
   rm -rf oorexxwasm && git init -q oorexxwasm
   git -C oorexxwasm fetch -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$OOREXXWASM_REV"
