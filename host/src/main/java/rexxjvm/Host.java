@@ -11,6 +11,7 @@ import java.io.InputStream;
 import java.io.OutputStream;
 import java.nio.charset.StandardCharsets;
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
@@ -144,14 +145,25 @@ final class Host {
         rs[0] = rs[1] = null;
         List<String> argv = strings(m, argvP);
         if (argv.isEmpty() || argv.get(0).isEmpty()) return UNKNOWN_COMMAND;
-        ProcessBuilder pb = new ProcessBuilder(argv);
-        Map<String, String> env = pb.environment();
-        env.clear();
+        Map<String, String> env = new LinkedHashMap<>();
         for (String e : strings(m, envpP)) {
             int eq = e.indexOf('=');
             if (eq > 0) env.put(e.substring(0, eq), e.substring(eq + 1));
         }
-        if (cwdP != 0) pb.directory(new File(m.readCString(cwdP, StandardCharsets.UTF_8)));
+        String cwd = cwdP == 0 ? null : m.readCString(cwdP, StandardCharsets.UTF_8);
+        // Java looks a bare name up in the JVM's own PATH, not in the one the command
+        // gets: a server's runs would find commands in the PATH of whoever started the
+        // server. Look it up here in the command's PATH, as execvp does natively.
+        String exe = argv.get(0);
+        if (exe.indexOf('/') < 0) {
+            exe = search(exe, env.containsKey("PATH") ? env.get("PATH") : "/bin:/usr/bin", cwd);
+            if (exe == null) return UNKNOWN_COMMAND;
+            argv.set(0, exe);
+        }
+        ProcessBuilder pb = new ProcessBuilder(argv);
+        pb.environment().clear();
+        pb.environment().putAll(env);
+        if (cwd != null) pb.directory(new File(cwd));
         boolean out = (flags & OUTPUT) != 0, err = (flags & ERROR) != 0, same = (flags & SAME) != 0;
         // A run with standard streams of its own (a hosted run's) cannot give them to the
         // process: the command's output is copied to them, and it reads no input.
@@ -205,6 +217,20 @@ final class Host {
         // status of 128+n, so it goes back as such (SysWasmHost.hpp would take -n). Under
         // ADDRESS SYSTEM the shell gives 128+n anyway, as natively.
         return rc;
+    }
+
+    /**
+     * The first executable regular file called name in the directories of path (an
+     * empty entry is the current directory, relative ones go from cwd), as execvp
+     * looks; null if there is none.
+     */
+    static String search(String name, String path, String cwd) {
+        for (String d : path.split(":", -1)) {
+            File f = new File(d.isEmpty() ? "." : d, name);
+            if (!f.isAbsolute() && cwd != null) f = new File(cwd, f.getPath());
+            if (f.isFile() && f.canExecute()) return f.getPath();
+        }
+        return null;
     }
 
     /** Copy in to out (or bytes to out, then close it) on a thread of its own. */
