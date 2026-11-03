@@ -242,7 +242,7 @@ final class RxApi {
             if (run != null && run.module.file != null) cmd.add(run.module.file);
             cmd.add("--orx-wasm-rxapi");
             ProcessBuilder pb = new ProcessBuilder(cmd).directory(new File("/"));
-            pb.redirectInput(ProcessBuilder.Redirect.from(new File("/dev/null")));
+            pb.redirectInput(ProcessBuilder.Redirect.from(new File(WinPath.WINDOWS ? "NUL" : "/dev/null")));
             pb.redirectOutput(ProcessBuilder.Redirect.DISCARD);
             pb.redirectError(ProcessBuilder.Redirect.DISCARD);
             pb.start();

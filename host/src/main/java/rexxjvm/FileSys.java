@@ -79,7 +79,7 @@ final class FileSys {
     /** The path at p, or null if the host cannot have it. */
     static Path path(Memory m, int p) {
         try {
-            return Paths.get(m.readCString(p, StandardCharsets.UTF_8));
+            return Paths.get(WinPath.toHost(m.readCString(p, StandardCharsets.UTF_8)));
         } catch (InvalidPathException x) {
             return null;
         }
@@ -229,7 +229,7 @@ final class FileSys {
         try {
             Path r = p.toRealPath();
             if (!Files.isDirectory(r)) return ENOTDIR;
-            return Host.put(m, buf, size, r.toString()) == 1 ? 0 : ENAMETOOLONG;
+            return Host.put(m, buf, size, WinPath.toGuest(r.toString())) == 1 ? 0 : ENAMETOOLONG;
         } catch (IOException | RuntimeException x) {
             return error(x);
         }
@@ -239,7 +239,7 @@ final class FileSys {
     static int symlink(String target, Path link) {
         if (link == null) return ENOENT;
         try {
-            Files.createSymbolicLink(link, Paths.get(target));
+            Files.createSymbolicLink(link, Paths.get(WinPath.toHost(target)));
             return 0;
         } catch (InvalidPathException x) {
             return EINVAL;

@@ -52,9 +52,10 @@ final class Host {
                 }),
             new HostFunction("rexxjvm", "executable_path", List.of(ValType.I32, ValType.I32), i32,
                 (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1],
-                                              System.getProperty("rexxjvm.executable")) }),
+                                              WinPath.toGuest(System.getProperty("rexxjvm.executable"))) }),
             new HostFunction("rexxjvm", "library_directory", List.of(ValType.I32, ValType.I32), i32,
-                (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1], libraryDirectory()) }),
+                (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1],
+                                              WinPath.toGuest(libraryDirectory())) }),
             new HostFunction("rexxjvm", "signal_wait", List.of(), i32, (inst, a) -> new long[] { signalWait() }));
     }
 
@@ -129,7 +130,8 @@ final class Host {
                 return null;
             }
         }
-        return home == null ? null : home.endsWith("/") ? home : home + "/";
+        if (home == null) return null;
+        return home.endsWith("/") || home.endsWith(File.separator) ? home : home + File.separator;
     }
 
     /** A NULL-terminated array of C strings in the module's memory. */
@@ -151,11 +153,13 @@ final class Host {
             if (eq > 0) env.put(e.substring(0, eq), e.substring(eq + 1));
         }
         String cwd = cwdP == 0 ? null : m.readCString(cwdP, StandardCharsets.UTF_8);
+        if (WinPath.WINDOWS) cwd = WinPath.toHost(cwd);
+        if (WinPath.WINDOWS && !windows(argv, env, cwd)) return UNKNOWN_COMMAND;
         // Java looks a bare name up in the JVM's own PATH, not in the one the command
         // gets: a server's runs would find commands in the PATH of whoever started the
         // server. Look it up here in the command's PATH, as execvp does natively.
         String exe = argv.get(0);
-        if (exe.indexOf('/') < 0) {
+        if (!WinPath.WINDOWS && exe.indexOf('/') < 0) {
             exe = search(exe, env.containsKey("PATH") ? env.get("PATH") : "/bin:/usr/bin", cwd);
             if (exe == null) return UNKNOWN_COMMAND;
             argv.set(0, exe);
@@ -207,7 +211,7 @@ final class Host {
         OutputStream runOut = run == null || toOut != null ? null : run.out;
         OutputStream runErr = run == null || toErr != null ? null : run.err;
         boolean ownIn = run != null && run.in != null;
-        ProcessBuilder.Redirect noInput = ProcessBuilder.Redirect.from(new File("/dev/null"));
+        ProcessBuilder.Redirect noInput = ProcessBuilder.Redirect.from(new File(WinPath.WINDOWS ? "NUL" : "/dev/null"));
         pb.redirectInput((flags & INPUT) != 0 ? ProcessBuilder.Redirect.PIPE
                          : toIn != null ? toIn : ownIn ? noInput : ProcessBuilder.Redirect.INHERIT);
         pb.redirectOutput(out || runOut != null ? ProcessBuilder.Redirect.PIPE
@@ -262,6 +266,82 @@ final class Host {
         // status of 128+n, so it goes back as such (SysWasmHost.hpp would take -n). Under
         // ADDRESS SYSTEM the shell gives 128+n anyway, as natively.
         return rc;
+    }
+
+    /**
+     * Windows: a command as the module gives it, in the host's form; false if there is
+     * no such command. The shells' environments come as "/bin/NAME -c command"
+     * (SystemCommands.cpp): "" ADDRESS SYSTEM, COMMAND and SH as /bin/sh, which here is
+     * cmd.exe (%ComSpec%), as natively on Windows; ADDRESS CMD too; any other shell
+     * (bash, pwsh, powershell) is looked up in PATH and given "-c" as it is. ADDRESS
+     * PATH's command name is looked up in PATH with PATHEXT. The command's PATH and
+     * name go back to the host's form; its other arguments are as the program gave them.
+     */
+    static boolean windows(List<String> argv, Map<String, String> env, String cwd) {
+        String path = null;
+        for (Map.Entry<String, String> e : env.entrySet())
+            if (e.getKey().equalsIgnoreCase("PATH")) path = e.getValue();
+        env.keySet().removeIf(k -> k.equalsIgnoreCase("PATH"));
+        if (path != null) {
+            path = WinPath.listToHost(path);
+            env.put("PATH", path);
+        }
+        String a0 = argv.get(0);
+        if (a0.startsWith("/bin/") && argv.size() == 3 && argv.get(1).equals("-c")) {
+            String shell = a0.substring(5).toLowerCase(java.util.Locale.ROOT);
+            if (shell.equals("sh") || shell.equals("cmd")) {
+                String comspec = null;
+                for (Map.Entry<String, String> e : env.entrySet())
+                    if (e.getKey().equalsIgnoreCase("ComSpec")) comspec = e.getValue();
+                if (comspec == null) comspec = System.getenv("ComSpec");
+                if (comspec == null) comspec = "cmd.exe";
+                // /s /c "command": cmd.exe takes away the first and the last quote, and
+                // runs the rest as typed; Java passes a quoted argument as it is
+                String command = argv.get(2);
+                argv.clear();
+                argv.addAll(List.of(comspec, "/s", "/c", "\"" + command + "\""));
+                return true;
+            }
+            String exe = searchWindows(shell, path, cwd);
+            if (exe == null) return false;
+            argv.set(0, exe);
+            return true;
+        }
+        a0 = WinPath.toHost(a0);
+        if (a0.indexOf('\\') < 0 && a0.indexOf(':') < 0) {
+            String exe = searchWindows(a0, path, cwd);
+            if (exe == null) return false;
+            a0 = exe;
+        } else if (!new File(a0).isAbsolute() && cwd != null) {
+            a0 = new File(cwd, a0).getPath();
+        }
+        argv.set(0, a0);
+        return true;
+    }
+
+    /**
+     * Windows: the first file called name, or name with one of PATHEXT's extensions,
+     * in the current directory or PATH's (';'), as cmd.exe looks; null if none.
+     */
+    static String searchWindows(String name, String path, String cwd) {
+        String pathext = System.getenv("PATHEXT");
+        List<String> exts = new ArrayList<>();
+        exts.add("");
+        for (String x : (pathext == null ? ".COM;.EXE;.BAT;.CMD" : pathext).split(";"))
+            if (!x.isEmpty()) exts.add(x);
+        List<String> dirs = new ArrayList<>();
+        dirs.add(cwd != null ? cwd : ".");
+        if (path != null) for (String d : path.split(";")) if (!d.isEmpty()) dirs.add(d);
+        boolean hasExt = name.lastIndexOf('.') > Math.max(name.lastIndexOf('\\'), name.lastIndexOf('/'));
+        for (String d : dirs) {
+            for (String x : exts) {
+                if (x.isEmpty() && !hasExt) continue;
+                File f = new File(d, name + x);
+                if (!f.isAbsolute() && cwd != null) f = new File(cwd, f.getPath());
+                if (f.isFile()) return f.getPath();
+            }
+        }
+        return null;
     }
 
     /**

@@ -8,12 +8,14 @@ $rexx = Join-Path (Resolve-Path $Dist) "rexx.cmd"
 Set-Location $PSScriptRoot
 $fails = 0
 function Check($name, $expected, $actual) {
+    # a failure shows its first lines only (a Java stack trace is long)
+    $actual = (("$actual" -split '\|') | Select-Object -First 4) -join "|"
     if ("$expected" -ceq "$actual") { "ok   $name" }
     else { "FAIL ${name}: expected [$expected], got [$actual]"; $script:fails++ }
 }
 function Info($name, $file) {
     "---- info: $name"
-    & $rexx $file 2>&1 | ForEach-Object { "     $_" }
+    & $rexx $file 2>&1 | Select-Object -First 25 | ForEach-Object { "     $_" }
     "     (exit $LASTEXITCODE)"
 }
 $out = & $rexx -e "say 'hi'" 2>&1

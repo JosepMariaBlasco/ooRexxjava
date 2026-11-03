@@ -244,28 +244,44 @@ final class Run {
             module = module(new File(args.get(0)).getAbsolutePath());
             av.set(0, new File(args.get(0)).getName());
         }
-        argv = Collections.unmodifiableList(av);
+        argv = Collections.unmodifiableList(WinPath.WINDOWS ? guestArgs(av) : av);
 
         // WASI: the arguments, the environment, the whole file system, the standard streams
-        WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv)
-            .withDirectory("/", Path.of("/"));
+        // (on Windows every drive, as /c, /d...: WinPath)
+        WasiOptions.Builder ob = WasiOptions.builder().inheritSystem().withArguments(argv);
+        if (WinPath.WINDOWS) {
+            for (File r : WinPath.roots()) {
+                String s = r.getPath();
+                if (s.length() >= 2 && s.charAt(1) == ':' && r.isDirectory()) ob.withDirectory(WinPath.drive(s.charAt(0)), r.toPath());
+            }
+        } else {
+            ob.withDirectory("/", Path.of("/"));
+        }
         if (in != null) ob.withStdin(new KeepOpenIn(in), o.inTty);
         if (out != null) ob.withStdout(new KeepOpenOut(out), o.outTty);
         if (err != null) ob.withStderr(new KeepOpenOut(err), o.errTty);
         // A Java host (the embedded mode, JSR-223): the interpreter's directory goes first
         // in PATH, as the rexxj script puts it, so that ::requires finds BSF.CLS and the
         // other .cls beside rexx.img without the host having to set PATH.
+        // On Windows, PATH (Path, whatever its case there) and PWD in the module's form.
         Map<String, String> env = o.env != null ? o.env : System.getenv();
-        String path = env.get("PATH");
-        String home = embedded ? Host.libraryDirectory() : null;
+        String path = null;
+        for (Map.Entry<String, String> e : env.entrySet())
+            if (WinPath.WINDOWS ? e.getKey().equalsIgnoreCase("PATH") : e.getKey().equals("PATH"))
+                path = WinPath.listToGuest(e.getValue());
+        String home = embedded ? WinPath.toGuest(Host.libraryDirectory()) : null;
         if (home != null) {
             home = home.endsWith("/") && home.length() > 1 ? home.substring(0, home.length() - 1) : home;
             path = path == null || path.isEmpty() ? home : home + ":" + path;
         }
-        for (Map.Entry<String, String> e : env.entrySet())
-            if (!e.getKey().equals("PWD") && !e.getKey().equals("PATH")) ob.withEnvironment(e.getKey(), e.getValue());
+        for (Map.Entry<String, String> e : env.entrySet()) {
+            String k = e.getKey();
+            boolean special = WinPath.WINDOWS ? k.equalsIgnoreCase("PWD") || k.equalsIgnoreCase("PATH")
+                                              : k.equals("PWD") || k.equals("PATH");
+            if (!special) ob.withEnvironment(k, e.getValue());
+        }
         if (path != null) ob.withEnvironment("PATH", path);
-        ob.withEnvironment("PWD", o.cwd != null ? o.cwd : System.getProperty("user.dir"));
+        ob.withEnvironment("PWD", WinPath.toGuest(o.cwd != null ? o.cwd : System.getProperty("user.dir")));
         // the C stack of the threads the interpreter creates (compat/orx_wasi_host.c,
         // orxWasiThreadStack): -Drexxjvm.threadstack=1M, else REXXJVM_THREADSTACK
         String threadStack = System.getProperty("rexxjvm.threadstack");
@@ -296,6 +312,27 @@ final class Run {
             if (primary == null && loader == null) primary = this;
         }
         if (loader != null) BY_LOADER.put(loader, this);
+    }
+
+    /**
+     * Windows: the program's name on rexx's command line in the module's form (WinPath),
+     * the first argument that is not an option (none after -e, whose program is text);
+     * for rexxc, its file names. Other arguments go to the program as they are.
+     */
+    static List<String> guestArgs(List<String> argv) {
+        List<String> l = new ArrayList<>(argv);
+        boolean rexxc = l.size() > 1 && l.get(1).equals("--orx-wasm-rexxc");
+        if (l.size() > 1 && l.get(1).startsWith("--orx-wasm-") && !rexxc) return l;
+        for (int i = rexxc ? 2 : 1; i < l.size(); i++) {
+            String a = l.get(i);
+            if (a.startsWith("-")) {
+                if (!rexxc && a.equals("-e")) break;
+                continue;
+            }
+            l.set(i, WinPath.toGuest(a));
+            if (!rexxc) break;
+        }
+        return l;
     }
 
     /**
