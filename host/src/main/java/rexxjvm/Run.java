@@ -1,14 +1,14 @@
 package rexxjvm;
 
-import com.dylibso.chicory.compiler.MachineFactoryCompiler;
-import com.dylibso.chicory.runtime.*;
-import com.dylibso.chicory.wasi.WasiExitException;
-import com.dylibso.chicory.wasi.WasiOptions;
-import com.dylibso.chicory.wasi.WasiPreview1;
-import com.dylibso.chicory.wasm.Parser;
-import com.dylibso.chicory.wasm.WasmModule;
-import com.dylibso.chicory.wasm.types.MemoryImport;
-import com.dylibso.chicory.wasm.types.ValType;
+import run.endive.compiler.MachineFactoryCompiler;
+import run.endive.runtime.*;
+import run.endive.wasi.WasiExitException;
+import run.endive.wasi.WasiOptions;
+import run.endive.wasi.WasiPreview1;
+import run.endive.wasm.Parser;
+import run.endive.wasm.WasmModule;
+import run.endive.wasm.types.MemoryImport;
+import run.endive.wasm.types.ValType;
 import java.io.File;
 import java.io.FilterInputStream;
 import java.io.FilterOutputStream;

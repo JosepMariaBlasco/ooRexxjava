@@ -1,15 +1,15 @@
 package rexxjvm;
 
-import static com.dylibso.chicory.runtime.ConstantEvaluators.computeConstantValue;
+import static run.endive.runtime.ConstantEvaluators.computeConstantValue;
 
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.runtime.WasmRuntimeException;
-import com.dylibso.chicory.wasm.ChicoryException;
-import com.dylibso.chicory.wasm.types.ActiveDataSegment;
-import com.dylibso.chicory.wasm.types.DataSegment;
-import com.dylibso.chicory.wasm.types.MemoryLimits;
-import com.dylibso.chicory.wasm.types.PassiveDataSegment;
+import run.endive.runtime.Instance;
+import run.endive.runtime.Memory;
+import run.endive.runtime.WasmRuntimeException;
+import run.endive.wasm.WasmEngineException;
+import run.endive.wasm.types.ActiveDataSegment;
+import run.endive.wasm.types.DataSegment;
+import run.endive.wasm.types.MemoryLimits;
+import run.endive.wasm.types.PassiveDataSegment;
 import java.lang.ref.Cleaner;
 import java.lang.reflect.Field;
 import java.nio.ByteOrder;
@@ -33,7 +33,7 @@ import sun.misc.Unsafe;
  * which the C library serves with {@code mmap}: the operating system gives the
  * pages zero-filled, and only when they are first touched.
  *
- * <p>Semantics as {@code ByteArrayMemory} (Chicory 1.7.5): accesses beyond the
+ * <p>Semantics as {@code ByteArrayMemory} (Endive 1.2.0, as Chicory 1.7.5's): accesses beyond the
  * current size trap ({@link WasmRuntimeException}); atomics are sequentially
  * consistent; {@code wait} / {@code notify} keep, per address, the waiters and
  * the wake-ups owed to them. Wasm memory is little-endian: on a big-endian
@@ -76,7 +76,7 @@ final class FlatMemory implements Memory {
      */
     static Memory create(MemoryLimits limits) {
         if ("bytearray".equals(System.getProperty("rexxjvm.memory")))
-            return new com.dylibso.chicory.runtime.ByteArrayMemory(limits);
+            return new run.endive.runtime.ByteArrayMemory(limits);
         return new FlatMemory(limits);
     }
 
@@ -233,7 +233,7 @@ final class FlatMemory implements Memory {
                 int offset = (int) computeConstantValue(instance, segment.offsetInstructions())[0];
                 write(offset, data, 0, data.length);
             } else if (!(s instanceof PassiveDataSegment)) {
-                throw new ChicoryException("Data segment should be active or passive: " + s);
+                throw new WasmEngineException("Data segment should be active or passive: " + s);
             }
         }
     }
@@ -392,7 +392,7 @@ final class FlatMemory implements Memory {
     private interface Condition { boolean holds(); }
 
     private int waitOn(int address, Condition condition, long timeout) {
-        if (!shared()) throw new ChicoryException("Attempt to wait on a non-shared memory, not supported.");
+        if (!shared()) throw new WasmEngineException("Attempt to wait on a non-shared memory, not supported.");
         long deadline = timeout < 0 ? Long.MAX_VALUE : System.nanoTime() + timeout;
         WaitState state = waitStates.computeIfAbsent(address, k -> new WaitState());
         synchronized (state) {
@@ -406,7 +406,7 @@ final class FlatMemory implements Memory {
                         state.wait(Math.max(remaining / 1_000_000L, 0), Math.max((int) (remaining % 1_000_000L), 0));
                     } catch (InterruptedException ie) {
                         Thread.currentThread().interrupt();
-                        throw new com.dylibso.chicory.runtime.ChicoryInterruptedException("Thread interrupted");
+                        throw new run.endive.runtime.WasmInterruptedException("Thread interrupted");
                     }
                 }
                 return 0;                                 // woken

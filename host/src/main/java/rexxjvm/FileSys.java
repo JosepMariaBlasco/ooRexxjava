@@ -1,8 +1,8 @@
 package rexxjvm;
 
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Memory;
-import com.dylibso.chicory.wasm.types.ValType;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Memory;
+import run.endive.wasm.types.ValType;
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.AccessDeniedException;

@@ -1,7 +1,7 @@
 package rexxjvm;
 
-import com.dylibso.chicory.runtime.ExportFunction;
-import com.dylibso.chicory.runtime.Instance;
+import run.endive.runtime.ExportFunction;
+import run.endive.runtime.Instance;
 import java.lang.instrument.ClassFileTransformer;
 import java.lang.instrument.Instrumentation;
 import java.security.ProtectionDomain;

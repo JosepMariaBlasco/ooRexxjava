@@ -31,8 +31,8 @@ if [ ! -d oorexx ]; then
                  && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
   mv oorexx.tmp oorexx
 fi
-# the Java launcher (Chicory 1.7.5)
-"$HERE/scripts/chicory-compiler.sh"   # Chicory's compiler, patched (host/chicory-patch)
+# the Java launcher (Endive 1.2.0, Chicory's successor)
+"$HERE/scripts/endive-compiler.sh"   # Endive's compiler, patched (host/chicory-patch)
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests)
 JAR=$HERE/host/target/rexxjvm-0.1.jar
 printf '#!/bin/sh\nexec java -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm

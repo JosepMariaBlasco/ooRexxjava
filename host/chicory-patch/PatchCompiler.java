@@ -2,7 +2,7 @@ import java.nio.file.*;
 import org.objectweb.asm.*;
 
 /**
- * Lowers the two sizes in Chicory 1.7.5's Compiler.compileCallIndirect (1,024 cases in one
+ * Lowers the two sizes in Endive 1.2.0's (and Chicory 1.7.5's) Compiler.compileCallIndirect (1,024 cases in one
  * switch, blocks of 4,096 beyond), so that the call_indirect dispatch methods stay under
  * HotSpot's 8,000-byte JIT limit (README.md). Usage: PatchCompiler IN OUT INLINE CHUNK.
  * Fails unless it finds exactly those two constants: a newer Chicory needs looking at.

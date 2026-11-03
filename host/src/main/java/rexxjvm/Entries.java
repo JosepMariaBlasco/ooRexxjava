@@ -1,8 +1,8 @@
 package rexxjvm;
 
-import com.dylibso.chicory.runtime.HostFunction;
-import com.dylibso.chicory.runtime.Instance;
-import com.dylibso.chicory.wasm.types.ValType;
+import run.endive.runtime.HostFunction;
+import run.endive.runtime.Instance;
+import run.endive.wasm.types.ValType;
 import java.util.List;
 import java.util.Map;
 import java.util.concurrent.*;

@@ -3,13 +3,15 @@
 Running ooRexx under Java: the ooRexx interpreter itself (the C++
 sources, unchanged but for a small patch) compiled to WebAssembly with
 WASI, and run on any Java virtual machine by
-[Chicory](https://github.com/dylibso/chicory), a WebAssembly runtime
-written in pure Java (no JNI, no native code).
+[Endive](https://github.com/bytecodealliance/endive), a WebAssembly runtime
+written in pure Java (no JNI, no native code): the Bytecode Alliance's
+continuation of [Chicory](https://github.com/dylibso/chicory), on which this
+project ran until 03/11/2026.
 
 **Status:** proof of concept (01/11/2026). ooRexx trunk r13346 (the
 ooRexx family's revision), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
-Chicory 1.7.5: multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
+Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
 conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
 `rxregexp` behave as in native ooRexx, and the Rexx Parser parsing its
 own sources produces an element dump byte-for-byte identical to
@@ -83,7 +85,7 @@ Rexx program.
 | `rexxj` | The launcher script. Java classes that Rexx code uses are found through `CLASSPATH`. |
 | `bsf4oorexx.jar`, `BSF.CLS`, `BSF_OnTheFly.cls`, `rgf_util2.rex` | BSF4ooRexx (Apache 2.0): its Java side and its Rexx packages. Its native library is in `rexx.wasm`. |
 | `rexx`, `rexxc`, `rxqueue`, `rxsubcom` | The usual names, as commands: `rexx` is `rexxj`; the utilities are in the interpreter's binary (`rexxj --orx-wasm-rexxc` ...). |
-| `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Chicory's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
+| `rexxj.jar` | The Java launcher with `rexx.wasm` translated to JVM bytecode at build time (Endive's build-time compiler): about 0.6 s to run `hello.rex`, against about 3 s when the wasm is translated at start-up. |
 | `rexx.wasm` | The interpreter as WebAssembly. Not needed by `rexxj`; `java -jar rexxj.jar rexx.wasm program.rex` translates it at start-up instead. |
 | `rexx.img` | The interpreter's image. |
 | `rxregexp.cls` | The Rexx side of `rxregexp` (the native side, like `rxmath` and `hostemu`, is embedded in the interpreter). |
@@ -166,7 +168,7 @@ line). Several interpreter instances can be open at once, each with its own
 `.local`. The module runs as `rexx --orx-wasm-embedded`, which waits for
 calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
 the calling Java thread, attached to the instance) is in
-[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Chicory's
+[`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md). Endive's
 frames live on the calling thread's Java stack: give the JVM `-Xss16m` or
 more (`dist/rexxj` does), or deep Rexx recursion fails. Strings only: Java objects cross through BSF4ooRexx (below).
 Each `Rexx.start()` is a module of its own, with its own memory, in the same
@@ -268,15 +270,17 @@ shared by the programs (the class path is the server's, not each client's
 r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
 0.56 M (02/11/2026):
 
-- **Chicory's compiler, patched** (`host/chicory-patch/`). Chicory translates
+- **The compiler, patched** (`host/chicory-patch/`, written for Chicory 1.7.5;
+  Endive 1.2.0's compiler has the same two constants). The runtime translates
   the module to JVM bytecode, and HotSpot never JIT-compiles a method over
-  8,000 bytes of bytecode. Chicory 1.7.5 dispatches indirect calls (every C++
+  8,000 bytes of bytecode. Chicory 1.7.5 and Endive 1.2.0 dispatch indirect calls (every C++
   virtual call) through one `switch` per function signature with up to 1,024
   cases, over that limit: those methods ran interpreted for ever. The patch
-  lowers two constants of Chicory's compiler (1,024 to 128, 4,096 to 512);
-  `scripts/chicory-compiler.sh` (run by `build.sh`) installs it in the local
-  Maven repository as `com.dylibso.chicory:compiler:1.7.5-orx1`, from the
-  official jar, which is not touched. 0.63 to 1.88 M.
+  lowers two constants of the compiler (1,024 to 128, 4,096 to 512);
+  `scripts/endive-compiler.sh` (run by `build.sh`) installs it in the local
+  Maven repository as `run.endive:compiler:1.2.0-orx1`, from the
+  official jar, which is not touched. 0.63 to 1.88 M (with Chicory). Reported to
+  Endive (bytecodealliance/endive#273), which means to fix it.
 - **`FlatMemory`**: the linear memory as one flat block outside the heap (see
   "Threads and their stacks").
 
@@ -321,12 +325,12 @@ per thread").
 | `build.sh` | Rebuilds everything from scratch. |
 | `build-test.sh` | Builds `dist-test/`, the variant with the test suite's native libraries. |
 | `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
-| `scripts/chicory-compiler.sh` | Installs Chicory's compiler with the patch of `host/chicory-patch/` in the local Maven repository (`build.sh` runs it). |
+| `scripts/endive-compiler.sh` | Installs Endive's compiler with the patch of `host/chicory-patch/` in the local Maven repository (`build.sh` runs it). |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
 | `client/` | `rexxjs.c`, the native client of the warm JVM ("A warm JVM: `rexxjs`"). |
-| `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Chicory's compiler, README "Speed"). |
+| `host/` | The Java launcher (Maven; Endive's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Endive's (formerly Chicory's) compiler, README "Speed"). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
 | `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |
@@ -340,5 +344,5 @@ per thread").
   with, sponsored, authorized, or otherwise endorsed by Oracle America, Inc.
 * **ooRexx**: Open Object Rexx and ooRexx are trademarks of the Rexx
   Language Association (RexxLA).
-* **WASI / Chicory**: All other product names, trademarks, and registered
+* **WASI / Endive / Chicory**: All other product names, trademarks, and registered
   trademarks are the property of their respective owners.

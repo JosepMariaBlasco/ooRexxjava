@@ -1,5 +1,13 @@
 # Chicory's call_indirect dispatch, in smaller methods (02/11/2026)
 
+*Since 03/11/2026 the project runs on Endive 1.2.0, Chicory's continuation, whose
+compiler has the same two constants in the same method: the patch applies
+unchanged. `scripts/endive-compiler.sh` (formerly `chicory-compiler.sh`) makes
+`run.endive:compiler:1.2.0-orx1` from the official `compiler-1.2.0.jar`;
+`host/pom.xml`'s property is `endive.compiler.version`. Reported to Endive as
+bytecodealliance/endive#273 (its maintainer means to fix it, with or on top of
+its #270, method splitting). What follows was written for Chicory 1.7.5.*
+
 HotSpot never JIT-compiles a method over 8,000 bytes of bytecode
 (`-XX:+DontCompileHugeMethods`, the default). Chicory 1.7.5's compiler
 (`Compiler.compileCallIndirect`) emits, per function signature, one

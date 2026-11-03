@@ -3,17 +3,17 @@
   <groupId>rexxjvm</groupId><artifactId>rexxjvm</artifactId><version>0.1</version>
   <properties>
     <maven.compiler.release>11</maven.compiler.release>
-    <chicory.version>1.7.5</chicory.version>
-    <!-- Chicory's compiler with its call_indirect dispatch in smaller methods, installed in the
-         local Maven repository by scripts/chicory-compiler.sh (host/chicory-patch/README.md) -->
-    <chicory.compiler.version>1.7.5-orx1</chicory.compiler.version>
+    <endive.version>1.2.0</endive.version>
+    <!-- Endive's compiler with its call_indirect dispatch in smaller methods, installed in the
+         local Maven repository by scripts/endive-compiler.sh (host/chicory-patch/README.md) -->
+    <endive.compiler.version>1.2.0-orx1</endive.compiler.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <dependencies>
-    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>runtime</artifactId><version>${chicory.version}</version></dependency>
-    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>wasi</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>run.endive</groupId><artifactId>runtime</artifactId><version>${endive.version}</version></dependency>
+    <dependency><groupId>run.endive</groupId><artifactId>wasi</artifactId><version>${endive.version}</version></dependency>
     <!-- the compiler brings ASM, which rexxjvm.Natives uses too -->
-    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.compiler.version}</version></dependency>
+    <dependency><groupId>run.endive</groupId><artifactId>compiler</artifactId><version>${endive.compiler.version}</version></dependency>
   </dependencies>
   <build><plugins>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId><version>3.6.0</version>
@@ -24,15 +24,15 @@
       </execution></executions></plugin>
   </plugins></build>
   <!-- mvn package -Pembedded -Dwasm.file=/path/to/rexx.wasm: rexx.wasm translated to
-       JVM bytecode at build time (Chicory's build-time compiler) and embedded in the jar -->
+       JVM bytecode at build time (Endive's build-time compiler) and embedded in the jar -->
   <profiles>
     <profile>
       <id>embedded</id>
       <build>
         <finalName>rexxj</finalName>
         <plugins>
-          <plugin><groupId>com.dylibso.chicory</groupId><artifactId>chicory-compiler-maven-plugin</artifactId><version>${chicory.version}</version>
-            <dependencies><dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.compiler.version}</version></dependency></dependencies>
+          <plugin><groupId>run.endive</groupId><artifactId>endive-compiler-maven-plugin</artifactId><version>${endive.version}</version>
+            <dependencies><dependency><groupId>run.endive</groupId><artifactId>compiler</artifactId><version>${endive.compiler.version}</version></dependency></dependencies>
             <executions><execution><goals><goal>compile</goal></goals>
               <configuration>
                 <name>rexxjvm.RexxModule</name>
