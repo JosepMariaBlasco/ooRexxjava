@@ -23,7 +23,9 @@ int main(void) {
 
     struct stat;
     int e = open("", O_RDONLY);
-    if (e >= 0) printf("open(\"\"): succeeded (fd %d), expected ENOENT\n", e);
+    /* as on wasmtime (50.0.1): wasi-libc makes "" into "." before path_open, so this
+       does not reach path_open's empty path (Endive PR #278 makes that one ENOENT) */
+    if (e >= 0) printf("open(\"\"): succeeded (fd %d), as on wasmtime\n", e);
     else printf("open(\"\"): %s (errno %d)\n", strerror(errno), errno);
     return 0;
 }

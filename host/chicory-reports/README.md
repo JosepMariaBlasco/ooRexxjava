@@ -19,7 +19,7 @@ preopened as `/` (`Run [--compile] module.wasm hostDir [args...]`;
 | Program | Shows | On Chicory (1.7.5 and `main`) | Natively (Linux, same C) |
 |---|---|---|---|
 | `c/rename.c` | `path_rename` asks `Files.move` for `COPY_ATTRIBUTES`, which the JDK refuses for a move | `rename: Not supported (errno 58)` | `rename: ok` |
-| `c/append.c` | `path_open` with `O_APPEND` drops `READ`; `O_TRUNC` with `O_APPEND` refused; `open("")` | `open O_TRUNC\|O_APPEND: Not supported`, `read: Bad file descriptor (errno 8)`, `open(""): succeeded` | `read: 4 bytes`, `open(""): No such file or directory` |
+| `c/append.c` | `path_open` with `O_APPEND` drops `READ`; `O_TRUNC` with `O_APPEND` refused (Endive #275, fixed by PR #278) | `open O_TRUNC\|O_APPEND: Not supported`, `read: Bad file descriptor (errno 8)` | `read: 4 bytes` (PR #278, 03/11/2026; wasmtime 50.0.1 the same). `open("")` succeeds on both: wasi-libc makes it `"."` before `path_open`, so it is not a difference (our report had it wrong) |
 | `c/symlink.c` | `path_readlink` returns the target's last component only; `path_symlink` stores the target resolved against the preopened directory, as an absolute host path | `readlink(/sub/deeplink): "target.txt"`; `stat(/sub/wasilink)`: ENOENT, the link on the host points to `<preopened>/target.txt` | `"../sub/target.txt"`; `stat`: ok |
 | `c/gen_indirect.py` | `call_indirect` dispatch over HotSpot's 8,000-byte limit (2,000 functions of one type) | see below | — |
 
