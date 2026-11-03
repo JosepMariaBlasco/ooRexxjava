@@ -569,7 +569,45 @@ The first use of runs: a minimal server and client, meant for the suite first.
   - *A command's input from a regular file* from the right offset (above).
   - *`rexxjs --orx-server-stop`*: the runs in progress end (143), the socket
     goes, the JVM ends; a server started meanwhile waits for the old one's lock.
-  - Tests: `tests/server/run.sh` (12 checks).
+  - Tests: `tests/server/run.sh` (12 checks; 14 since step 2).
+
+  Step 2, *the streams relayed through the socket* (03/11/2026): the mode for
+  systems with no `/proc/PID/fd` (macOS, Windows), on Linux with
+  `REXXJ_SERVER_RELAY` set. The request ends with the mode, `'P'` or `'R'`
+  (`"RXJ2"`); relayed, the socket then carries frames both ways
+  (`host/.../Relay.java` has them):
+  - *Output* as `'O'`/`'E'` frames that the client writes to its own fd 1 and 2:
+    the order, appending and the offsets come out as natively, with nothing to
+    fix at the end. The run's threads queue them, one thread of the relay's own
+    writes them, many at once: a thread interrupted while it writes to a
+    channel closes the channel, and a run's threads are interrupted as it ends,
+    while they write its last output (the `'X'` of `--orx-server-stop` was lost
+    so). The queue is bounded: a client that does not keep up holds the run back.
+  - *Input on demand*: each read of the program sends `'R' n`, and the client
+    does one `read(0, n)` and answers `'I'` with what it got. So the client never
+    takes from its input more than the program asked for, and what comes after
+    (a command, the next program in a pipeline) finds the rest, as natively.
+  - *Commands run by the client* (`'C'`: argv, environment, directory, what is
+    captured, the input given): it forks and execs them with its own standard
+    streams but for those the program captures (`ADDRESS … WITH`), which go
+    through pipes and back as `'o'`/`'e'` frames, then `'D'` and the status. A
+    command gets the client's terminal, pipes and files themselves: no
+    `--orx-stdin-at`, and `vi` or `less` see the terminal. A run that ends while a
+    command runs sends `'K'` (SIGTERM) for it. SIGPIPE: the client ignores it
+    (its commands get the disposition it found), and a broken pipe on its own
+    output raises it again, so `rexx p | head -1` ends as a native program
+    would (141); through `/proc` the server gets EPIPE instead and the client
+    exits 0.
+  - The client's other differences: a socket as a standard stream is fine
+    relayed (only closed ones fall back to `rexxj`), and it no longer needs
+    `pipe2`, `SOCK_CLOEXEC` or `/proc/self/exe` (macOS: `_NSGetExecutablePath`,
+    `SO_NOSIGPIPE`; not tried there, nor built by `build.sh` but on Linux).
+  - Results (Linux, forced): the suite relayed, **405/405** in about 4 min 45 s
+    (`results/suite-jvm-r13358-bsf1131-server-relay.csv`; the groups' times add
+    up to 463 s); `tests/server/run.sh` 14/14 in both modes (two checks added:
+    large captured streams, a HALT while a command runs). Output is faster
+    relayed once warm: 200,000 `say` to a file, 3.0–3.4 s against 4.6–4.9
+    through `/proc` (a write per line there; here many frames per write).
 
   What runs still share, and will: the JVM's heap (a run that exhausts it
   affects all) and `System.exit` (Java code that calls it ends the server and

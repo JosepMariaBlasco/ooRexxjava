@@ -105,8 +105,10 @@ cp "$HERE/host/target/rexxj.jar" dist/
 # rexxjvm.Server (client/rexxjs.c; README.md, "A warm JVM: rexxjs"), if it was built
 printf '#!/bin/sh\nD=$(dirname "$(readlink -f "$0")")\n[ -n "$REXXJ_SERVER" ] && [ -x "$D/rexxjs" ] && exec "$D/rexxjs" "$@"\nPATH="$D:$PATH" exec java -Xss16m $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"\n' > dist/rexxj
 chmod +x dist/rexxj
-# rexxjs: Linux only (it opens the client's streams as /proc/PID/fd/N); without a C
-# compiler, or elsewhere, there is none and rexxj runs as usual
+# rexxjs: built on Linux only for now (the server opens the client's streams as
+# /proc/PID/fd/N, or with REXXJ_SERVER_RELAY they are relayed through the socket, the
+# mode macOS and Windows will need: client/rexxjs.c); without a C compiler, or
+# elsewhere, there is none and rexxj runs as usual
 rm -f dist/rexxjs
 if [ "$(uname -s)" = Linux ] && command -v cc >/dev/null; then
   cc -O2 -Wall -o dist/rexxjs "$HERE/client/rexxjs.c" || rm -f dist/rexxjs

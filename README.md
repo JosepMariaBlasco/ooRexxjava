@@ -257,12 +257,16 @@ With `REXXJ_SERVER` set, `rexxj` (and so `rexx`, `rexxc`, `rxqueue`,
 `rexxjvm.Server`, a JVM that keeps the module warm and runs each program as a
 run of its own (above); the server opens the client's standard streams itself
 (`/proc/PID/fd/0`, `1`, `2`), the client sends its signals on (a HALT, as
-natively) and exits with the program's exit code. The first `rexxjs` starts the
+natively) and exits with the program's exit code. Where there is no `/proc`
+(macOS, Windows), or on Linux with `REXXJ_SERVER_RELAY` set, the streams are
+relayed through the socket instead, and the client itself runs the commands
+the program issues, with its own standard streams, so they get its terminal,
+pipes and files as natively (`host/.../Relay.java`). The first `rexxjs` starts the
 server, detached (`$TMPDIR/.ooRexx-jvm-USER-server-KEY`, one per user and
 build, its output in `….log`); it ends after 15 minutes with nothing running
 (`-Drexxjvm.server.idle`, seconds, in `REXXJ_JAVA_OPTIONS`). When it cannot do
-that (no server can start, a standard stream that is closed or a socket),
-`rexxjs` runs `rexxj` as usual.
+that (no server can start, a standard stream that is closed, or a socket
+unless relayed), `rexxjs` runs `rexxj` as usual.
 
 ```bash
 export REXXJ_SERVER=1

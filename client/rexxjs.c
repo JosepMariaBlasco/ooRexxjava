@@ -9,13 +9,17 @@
  * ($TMPDIR/.ooRexx-jvm-USER-server-KEY, KEY from rexxj.jar's inode, size and time);
  * if there is none, it is started, detached. The client sends its arguments,
  * environment (with its directory first in PATH, as rexxj does), current directory,
- * pid and ppid, and what its standard streams are; the server opens them itself as
- * /proc/PID/fd/0, 1, 2 (Linux, the same user). SIGINT, SIGTERM and SIGHUP are sent on
- * to the program (a HALT, as natively); the client exits with the program's exit code.
+ * pid and ppid, and what its standard streams are. On Linux the server opens them
+ * itself as /proc/PID/fd/0, 1, 2 (the same user may); elsewhere, or on Linux when
+ * REXXJ_SERVER_RELAY is set, they are relayed through the socket, and the client runs
+ * the program's commands itself, with its own streams (relay(); Relay.java). SIGINT,
+ * SIGTERM and SIGHUP are sent on to the program (a HALT, as natively); the client exits
+ * with the program's exit code.
  *
  * Whenever it cannot do that (no server and none can start, a standard stream that is
- * closed or a socket, the API server's daemon), it runs rexxj instead, as if it had not
- * been there. rexxj runs rexxjs when REXXJ_SERVER is set (build.sh's dist/rexxj).
+ * closed, or a socket when not relayed, the API server's daemon), it runs rexxj instead,
+ * as if it had not been there. rexxj runs rexxjs when REXXJ_SERVER is set (build.sh's
+ * dist/rexxj).
  */
 #define _GNU_SOURCE
 #include <errno.h>
@@ -36,7 +40,24 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifdef __APPLE__
+#include <mach-o/dyld.h>
+#endif
+
 extern char **environ;
+
+/* pipe2, SOCK_CLOEXEC and MSG_NOSIGNAL are not everywhere (macOS: SO_NOSIGPIPE) */
+#ifndef MSG_NOSIGNAL
+#define MSG_NOSIGNAL 0
+#endif
+static int cloexec(int fd) { return fd < 0 ? fd : (fcntl(fd, F_SETFD, FD_CLOEXEC), fd); }
+
+static int pipe_cloexec(int p[2]) {
+    if (pipe(p) < 0) return -1;
+    cloexec(p[0]);
+    cloexec(p[1]);
+    return 0;
+}
 
 static char dir[PATH_MAX];                  /* where rexxjs, rexxj and rexxj.jar are */
 static int sigpipe_fds[2];
@@ -97,8 +118,12 @@ static int write_all(int fd, const void *p, size_t n) {
 /* ---- the server ---- */
 
 static int connect_to(const char *path) {
-    int s = socket(AF_UNIX, SOCK_STREAM | SOCK_CLOEXEC, 0);
+    int s = cloexec(socket(AF_UNIX, SOCK_STREAM, 0));
     if (s < 0) return -1;
+#ifdef SO_NOSIGPIPE
+    int one = 1;
+    setsockopt(s, SOL_SOCKET, SO_NOSIGPIPE, &one, sizeof one);
+#endif
     struct sockaddr_un a;
     memset(&a, 0, sizeof a);
     a.sun_family = AF_UNIX;
@@ -152,7 +177,7 @@ static void start_server(const char *path) {
 
 /* ---- signals: sent on to the program ---- */
 
-static void on_signal(int sig) {
+static void on_signal(int sig) {   /* SIGCHLD too, relayed: a command ended */
     unsigned char c = (unsigned char)sig;
     int e = errno;
     (void)!write(sigpipe_fds[1], &c, 1);
@@ -168,6 +193,301 @@ static void forward(int sig) {
     sigemptyset(&sa.sa_mask);
     sa.sa_flags = SA_RESTART;
     sigaction(sig, &sa, NULL);
+}
+
+/* ---- relayed streams (Relay.java has the frames) ---- */
+
+/* the server's frames come through a buffer: a read for many of them, not three for each */
+static int relay_sock = -1;
+static unsigned char sbuf[128 << 10];
+static size_t sb_at, sb_n;
+
+static int read_full(int fd, void *p, size_t n) {
+    char *c = p;
+    if (fd == relay_sock) {
+        while (n > 0) {
+            if (sb_at == sb_n) {
+                ssize_t r = read(fd, sbuf, sizeof sbuf);
+                if (r < 0 && errno == EINTR) continue;
+                if (r <= 0) return -1;
+                sb_at = 0;
+                sb_n = (size_t)r;
+            }
+            size_t k = sb_n - sb_at < n ? sb_n - sb_at : n;
+            memcpy(c, sbuf + sb_at, k);
+            sb_at += k;
+            c += k;
+            n -= k;
+        }
+        return 0;
+    }
+    while (n > 0) {
+        ssize_t r = read(fd, c, n);
+        if (r < 0 && errno == EINTR) continue;
+        if (r <= 0) return -1;
+        c += r;
+        n -= (size_t)r;
+    }
+    return 0;
+}
+
+static int out_all(int fd, const void *p, size_t n) {   /* to our own output, not the socket */
+    const char *c = p;
+    while (n > 0) {
+        ssize_t w = write(fd, c, n);
+        if (w < 0) { if (errno == EINTR) continue; return -1; }
+        c += w;
+        n -= (size_t)w;
+    }
+    return 0;
+}
+
+static uint32_t get32(const unsigned char *c) {
+    return ((uint32_t)c[0] << 24) | ((uint32_t)c[1] << 16) | ((uint32_t)c[2] << 8) | c[3];
+}
+
+static int read32(int s, int32_t *v) {
+    unsigned char c[4];
+    if (read_full(s, c, 4) < 0) return -1;
+    *v = (int32_t)get32(c);
+    return 0;
+}
+
+static char *readstr(int s) {
+    int32_t n;
+    if (read32(s, &n) < 0 || n < 0 || n > (64 << 20)) return NULL;
+    char *p = malloc((size_t)n + 1);
+    if (!p || read_full(s, p, (size_t)n) < 0) { free(p); return NULL; }
+    p[n] = 0;
+    return p;
+}
+
+#define CAPTURE_OUT 1
+#define CAPTURE_ERR 2
+#define CAPTURE_SAME 4
+#define GIVE_INPUT 8
+
+/* A command the server asked us to run: its pipes for what the program captures. */
+typedef struct command {
+    int32_t id;
+    pid_t pid;
+    int out, err, in;                   /* our ends; -1 when closed or not captured */
+    char *input; size_t inlen, inat;    /* what goes to its standard input */
+    int status, reaped;
+    struct command *next;
+} command;
+
+static command *commands;
+static struct sigaction pipe_was;       /* SIGPIPE as we got it, for the commands */
+
+static int nonblock(int fd) { return fcntl(fd, F_SETFL, fcntl(fd, F_GETFL) | O_NONBLOCK); }
+
+static void close_fd(int *fd) { if (*fd >= 0) { close(*fd); *fd = -1; } }
+
+/* A broken pipe on our own output: what natively would have ended the program. */
+static void broken(void) {
+    if (pipe_was.sa_handler == SIG_IGN) return;          /* natively an error; the output is lost */
+    sigaction(SIGPIPE, &pipe_was, NULL);
+    raise(SIGPIPE);
+}
+
+static int frame(int s, unsigned char type, int32_t id, const void *p, int32_t n) {
+    unsigned char h[9] = { type };
+    size_t hn = 1;
+    if (type == 'o' || type == 'e' || type == 'D') {
+        h[1] = id >> 24; h[2] = id >> 16; h[3] = id >> 8; h[4] = id;
+        hn = 5;
+    }
+    h[hn] = n >> 24; h[hn + 1] = n >> 16; h[hn + 2] = n >> 8; h[hn + 3] = n;
+    hn += 4;
+    if (write_all(s, h, hn) < 0) return -1;
+    return p && n > 0 ? write_all(s, p, (size_t)n) : 0;
+}
+
+/* 'C': starts the command, with our standard streams but for those captured */
+static int start_command(int s) {
+    int32_t id, argc, envc, flags, inlen;
+    if (read32(s, &id) < 0 || read32(s, &argc) < 0 || argc < 1 || argc > 1 << 20) return -1;
+    char **av = calloc((size_t)argc + 1, sizeof *av);
+    for (int i = 0; i < argc; i++) if (!(av[i] = readstr(s))) return -1;
+    if (read32(s, &envc) < 0 || envc < 0 || envc > 1 << 20) return -1;
+    char **ev = calloc((size_t)envc + 1, sizeof *ev);
+    for (int i = 0; i < envc; i++) if (!(ev[i] = readstr(s))) return -1;
+    char *cwd = readstr(s);
+    if (!cwd || read32(s, &flags) < 0 || read32(s, &inlen) < 0 || inlen < 0) return -1;
+    char *input = malloc((size_t)inlen + 1);
+    if (!input || read_full(s, input, (size_t)inlen) < 0) return -1;
+
+    command *c = calloc(1, sizeof *c);
+    c->id = id;
+    c->out = c->err = c->in = -1;
+    c->input = input;
+    c->inlen = (size_t)inlen;
+    int po[2] = { -1, -1 }, pe[2] = { -1, -1 }, pi[2] = { -1, -1 }, ex[2] = { -1, -1 };
+    int ok = pipe_cloexec(ex) == 0
+          && (!(flags & CAPTURE_OUT) || pipe_cloexec(po) == 0)
+          && (!(flags & CAPTURE_ERR) || pipe_cloexec(pe) == 0)
+          && (!(flags & GIVE_INPUT) || pipe_cloexec(pi) == 0);
+    pid_t pid = ok ? fork() : -1;
+    if (pid == 0) {
+        /* the dispositions the command would have had natively: ours, as we got them */
+        sigaction(SIGPIPE, &pipe_was, NULL);
+        signal(SIGCHLD, SIG_DFL);
+        if (pi[0] >= 0) dup2(pi[0], 0);
+        if (po[1] >= 0) dup2(po[1], 1);
+        if (pe[1] >= 0) dup2(pe[1], 2);
+        else if (flags & CAPTURE_SAME) dup2(po[1], 2);
+        if (*cwd && chdir(cwd) < 0) { int e = errno; (void)!write(ex[1], &e, sizeof e); _exit(127); }
+        execve(av[0], av, ev);
+        int e = errno;
+        (void)!write(ex[1], &e, sizeof e);
+        _exit(127);
+    }
+    close_fd(&ex[1]);
+    close_fd(&po[1]); close_fd(&pe[1]); close_fd(&pi[0]);
+    int e;
+    int failed = pid < 0 || (ex[0] >= 0 && read_full(ex[0], &e, sizeof e) == 0);
+    close_fd(&ex[0]);
+    for (int i = 0; i < argc; i++) free(av[i]);
+    for (int i = 0; i < envc; i++) free(ev[i]);
+    free(av); free(ev); free(cwd);
+    if (failed) {
+        close_fd(&po[0]); close_fd(&pe[0]); close_fd(&pi[1]);
+        if (pid > 0) while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
+        free(input); free(c);
+        return frame(s, 'D', id, NULL, -1);
+    }
+    c->pid = pid;
+    c->out = po[0];
+    c->err = pe[0];
+    c->in = pi[1];
+    if (c->out >= 0) nonblock(c->out);
+    if (c->err >= 0) nonblock(c->err);
+    if (c->in >= 0) { nonblock(c->in); if (c->inlen == 0) close_fd(&c->in); }
+    c->next = commands;
+    commands = c;
+    return 0;
+}
+
+static void reap(void) {
+    int st;
+    pid_t p;
+    while ((p = waitpid(-1, &st, WNOHANG)) > 0) {
+        for (command *c = commands; c; c = c->next) {
+            if (c->pid != p) continue;
+            c->reaped = 1;
+            c->status = WIFSIGNALED(st) ? 128 + WTERMSIG(st) : WIFEXITED(st) ? WEXITSTATUS(st) : 127;
+        }
+    }
+}
+
+/*
+ * The relayed run: frames from the server (our output, reads of our input, commands to
+ * run) and to it (signals, what we read, the commands' captured output and end), until
+ * its 'X'. Returns the exit code, or 70 if the server went away.
+ */
+static int relay(int s) {
+    static char buf[64 << 10];
+    int32_t want = 0;                   /* an 'R' to answer: how much, at most */
+    relay_sock = s;
+    for (;;) {
+        struct pollfd p[64];
+        command *who[64];
+        int n = 0;
+        p[n++] = (struct pollfd){ s, POLLIN, 0 };
+        p[n++] = (struct pollfd){ sigpipe_fds[0], POLLIN, 0 };
+        if (want > 0) p[n++] = (struct pollfd){ 0, POLLIN, 0 };
+        int fixed = n;
+        for (command *c = commands; c && n < 61; c = c->next) {
+            if (c->out >= 0) { who[n] = c; p[n++] = (struct pollfd){ c->out, POLLIN, 0 }; }
+            if (c->err >= 0) { who[n] = c; p[n++] = (struct pollfd){ c->err, POLLIN, 0 }; }
+            if (c->in >= 0) { who[n] = c; p[n++] = (struct pollfd){ c->in, POLLOUT, 0 }; }
+        }
+        /* frames already buffered: handle them before waiting */
+        if (poll(p, (nfds_t)n, sb_at < sb_n ? 0 : -1) < 0) {
+            if (errno == EINTR) continue;
+            perror("rexxjs: poll");
+            return 70;
+        }
+        if (p[1].revents & POLLIN) {
+            unsigned char sig;
+            if (read(sigpipe_fds[0], &sig, 1) == 1) {
+                if (sig == SIGCHLD) reap();
+                else {
+                    unsigned char m[5] = { 'S', 0, 0, 0, sig };
+                    write_all(s, m, 5);
+                }
+            }
+        }
+        if (want > 0 && (p[2].revents & (POLLIN | POLLHUP | POLLERR))) {
+            ssize_t r = read(0, buf, (size_t)want);
+            if (r < 0 && (errno == EINTR || errno == EAGAIN)) { /* again */ }
+            else {
+                want = 0;
+                if (frame(s, 'I', 0, buf, r < 0 ? -1 : (int32_t)r) < 0) goto gone;
+            }
+        }
+        for (int i = fixed; i < n; i++) {
+            if (!p[i].revents) continue;
+            command *c = who[i];
+            if (p[i].fd == c->in) {
+                ssize_t w = write(c->in, c->input + c->inat, c->inlen - c->inat);
+                if (w > 0) c->inat += (size_t)w;
+                if ((w < 0 && errno != EINTR && errno != EAGAIN) || c->inat == c->inlen) close_fd(&c->in);
+                continue;
+            }
+            int *fd = p[i].fd == c->out ? &c->out : &c->err;
+            ssize_t r = read(*fd, buf, sizeof buf);
+            if (r < 0 && (errno == EINTR || errno == EAGAIN)) continue;
+            if (r <= 0) { close_fd(fd); continue; }
+            if (frame(s, fd == &c->out ? 'o' : 'e', c->id, buf, (int32_t)r) < 0) goto gone;
+        }
+        /* the commands that ended and whose captured output has all gone */
+        for (command **cp = &commands; *cp; ) {
+            command *c = *cp;
+            if (c->reaped && c->out < 0 && c->err < 0) {
+                close_fd(&c->in);
+                if (frame(s, 'D', c->id, NULL, c->status) < 0) goto gone;
+                *cp = c->next;
+                free(c->input);
+                free(c);
+            } else cp = &c->next;
+        }
+        if (!(p[0].revents & (POLLIN | POLLHUP | POLLERR)) && sb_at == sb_n) continue;
+
+        /* a frame from the server: read whole (it writes each at once) */
+        unsigned char t;
+        if (read_full(s, &t, 1) < 0) goto gone;
+        int32_t a, b;
+        switch (t) {
+        case 'O': case 'E':
+            if (read32(s, &a) < 0 || a < 0 || a > (int32_t)sizeof buf || read_full(s, buf, (size_t)a) < 0) goto gone;
+            if (out_all(t == 'O' ? 1 : 2, buf, (size_t)a) < 0 && errno == EPIPE) broken();
+            break;
+        case 'R':
+            if (read32(s, &a) < 0) goto gone;
+            want = a < 1 ? 1 : a > (int32_t)sizeof buf ? (int32_t)sizeof buf : a;
+            break;
+        case 'C':
+            if (start_command(s) < 0) goto gone;
+            break;
+        case 'K':
+            if (read32(s, &a) < 0 || read32(s, &b) < 0) goto gone;
+            for (command *c = commands; c; c = c->next) if (c->id == a && !c->reaped) kill(c->pid, b);
+            break;
+        case 'X': {
+            unsigned char x[12];
+            if (read_full(s, x, 12) < 0) goto gone;
+            return (int)get32(x) & 0xff;
+        }
+        default:
+            fprintf(stderr, "rexxjs: unexpected frame from the server\n");
+            return 70;
+        }
+    }
+gone:
+    fprintf(stderr, "rexxjs: the server went away\n");
+    return 70;
 }
 
 /* ---- main ---- */
@@ -216,9 +536,15 @@ static int stdin_at(char **argv) {
 int main(int argc, char **argv) {
     (void)argc;
     char self[PATH_MAX];
+#ifdef __APPLE__
+    char exe[PATH_MAX];
+    uint32_t size = sizeof exe;
+    if (_NSGetExecutablePath(exe, &size) != 0 || !realpath(exe, self)) { fputs("rexxjs: where am I?\n", stderr); return 70; }
+#else
     ssize_t len = readlink("/proc/self/exe", self, sizeof self - 1);
     if (len <= 0) { perror("rexxjs: /proc/self/exe"); return 70; }
     self[len] = 0;
+#endif
     strcpy(dir, self);
     char *slash = strrchr(dir, '/');
     if (slash) *slash = 0;
@@ -230,12 +556,20 @@ int main(int argc, char **argv) {
     /* rexxjs --orx-server-stop: ends this build's server (and the programs it runs) */
     int stop = argv[1] && strcmp(argv[1], "--orx-server-stop") == 0;
 
-    /* the standard streams: kinds and offsets; closed or a socket: rexxj */
+    /* relayed: where there is no /proc to open our streams through, or when asked */
+#ifdef __linux__
+    const char *rv = getenv("REXXJ_SERVER_RELAY");
+    int relayed = rv && *rv;
+#else
+    int relayed = 1;
+#endif
+
+    /* the standard streams: kinds and offsets; closed, or a socket unless relayed: rexxj */
     char kind[3];
     int64_t offset[3];
     for (int fd = 0; fd < 3; fd++) {
         struct stat st;
-        if ((fstat(fd, &st) < 0 || S_ISSOCK(st.st_mode)) && !stop) fallback(argv);
+        if ((fstat(fd, &st) < 0 || (S_ISSOCK(st.st_mode) && !relayed)) && !stop) fallback(argv);
         offset[fd] = -1;
         if (isatty(fd)) kind[fd] = 'T';
         else if (S_ISREG(st.st_mode)) {
@@ -283,7 +617,7 @@ int main(int argc, char **argv) {
 
     /* the request */
     buf b = { 0 };
-    put(&b, "RXJ1", 4);
+    put(&b, "RXJ2", 4);
     put32(&b, (uint32_t)getpid());
     put32(&b, (uint32_t)getppid());
     char cwd[PATH_MAX];
@@ -305,15 +639,29 @@ int main(int argc, char **argv) {
         put(&b, &kind[fd], 1);
         put64(&b, (uint64_t)offset[fd]);
     }
+    put(&b, relayed ? "R" : "P", 1);
 
-    if (pipe2(sigpipe_fds, O_CLOEXEC) < 0) { perror("rexxjs"); return 70; }
+    if (pipe_cloexec(sigpipe_fds) < 0) { perror("rexxjs"); return 70; }
     forward(SIGINT);
     forward(SIGTERM);
     forward(SIGHUP);
+    if (relayed) {
+        /* a command's end comes as SIGCHLD; a broken pipe to one, as EPIPE */
+        struct sigaction sa;
+        memset(&sa, 0, sizeof sa);
+        sa.sa_handler = on_signal;
+        sigemptyset(&sa.sa_mask);
+        sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+        sigaction(SIGCHLD, &sa, NULL);
+        sa.sa_handler = SIG_IGN;
+        sa.sa_flags = 0;
+        sigaction(SIGPIPE, &sa, &pipe_was);
+    }
     if (write_all(s, b.p, b.n) < 0) {
         fprintf(stderr, "rexxjs: the server went away\n");
         return 70;
     }
+    if (relayed) return relay(s);
 
     /* wait for the answer, sending signals on */
     unsigned char ans[13];

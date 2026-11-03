@@ -160,11 +160,25 @@ final class Host {
             if (exe == null) return UNKNOWN_COMMAND;
             argv.set(0, exe);
         }
+        // A server's client whose streams are relayed (Relay): the client runs the
+        // command, with its own standard streams but for those captured here.
+        Run run = Run.current();
+        if (run != null && run.relay != null) {
+            boolean out = (flags & OUTPUT) != 0, err = (flags & ERROR) != 0, same = (flags & SAME) != 0;
+            byte[] input = (flags & INPUT) == 0 ? null
+                : inputLength > 0 ? m.readBytes(inputP, inputLength) : new byte[0];
+            run.flush();                          // what the interpreter wrote comes first
+            try {
+                int rc = run.relay.command(argv, env, cwd, input, out, err && !(out && same), out && same, rs);
+                return rc < 0 ? UNKNOWN_COMMAND : rc;
+            } catch (IOException x) {
+                return UNKNOWN_COMMAND;           // the client went away, or the run is ending
+            }
+        }
         // A server's client with a regular file as standard input: the command gets the
         // file through a new open file description (cmdIn, /proc/PID/fd/0), at offset 0,
         // where natively it shares the client's. rexxjs --orx-stdin-at moves it to where
         // the run's reading is, and reports where the command left it (client/rexxjs.c).
-        Run run = Run.current();
         File report = null;
         if (run != null && run.inFile != null && run.cmdIn != null && (flags & INPUT) == 0) {
             String home = libraryDirectory();

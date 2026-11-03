@@ -144,6 +144,11 @@ final class Run {
          * reading has reached, and the run goes on from where they left it (Host).
          */
         java.nio.channels.FileChannel inFile;
+        /**
+         * A server's client whose standard streams are relayed through the socket: the
+         * commands the program runs are started by the client (Host, Relay).
+         */
+        Relay relay;
     }
 
     // ---- the run ------------------------------------------------------------------------
@@ -183,6 +188,8 @@ final class Run {
     final ClassLoader loader;
     /** The client's standard input as a regular file (Options.inFile); null if it is not one. */
     final java.nio.channels.FileChannel inFile;
+    /** The relay of a server's client (Options.relay); null if none. */
+    final Relay relay;
     final Memory memory;
     final ImportValues imports;
     private final WasiPreview1 wasi;
@@ -224,6 +231,7 @@ final class Run {
         cmdErr = o.cmdErr;
         loader = o.loader;
         inFile = o.inFile;
+        relay = o.relay;
 
         // the module, and its argv: a .wasm file first, else the one translated at build time
         List<String> args = o.args;

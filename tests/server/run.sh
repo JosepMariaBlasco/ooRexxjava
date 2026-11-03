@@ -8,8 +8,12 @@
 # - Java's System.out and System.err reach the client (sysout.rex);
 # - a command reads the client's standard input, a regular file, from where the
 #   program's reading reached, as with rexxj (stdin-cmd.rex);
+# - commands with captured input, output and error, large (capture.rex); a HALT
+#   while a command runs (halt-cmd.rex);
 # - rexxjs --orx-server-stop ends the server and its programs (143); the next run
 #   starts a new one.
+# REXXJ_SERVER_RELAY=1 tests/server/run.sh runs it all with the streams relayed through
+# the socket (the mode for systems with no /proc); the expected results are the same.
 set -u
 D=${1:-/home/claude/work/dist}
 cd "$(dirname "$0")"
@@ -45,6 +49,10 @@ REXXJ_SERVER= "$D/rexx" stdin-cmd.rex < "$T/in.txt" > "$T/direct.txt"
 # share the program's, after the interpreter's 4 KB read: lines differ, the shape not
 check "a command's standard input (direct)" "rexx: 1||1861|rexx: 2|rexx: 3" "$(tr '\n' '|' < "$T/direct.txt" | sed 's/|$//')"
 check "a command's standard input (server)" "rexx: 1|1|1042|rexx: 2|rexx: 3" "$(tr '\n' '|' < "$T/server.txt" | sed 's/|$//')"
+
+check "captured streams" "50000 line 50000 | 300000 300000 | 3 1 err" "$("$D/rexx" capture.rex)"
+"$D/rexx" halt-cmd.rex > "$T/h.txt" & sleep 3; kill -TERM $!; wait $!; rc=$?
+check "a HALT while a command runs" "start|HALT 9" "$(tr '\n' '|' < "$T/h.txt" | sed 's/|$//') $rc"
 
 printf 'say "start"; call SysSleep 30; say "never"\n' > "$T/long.rex"
 "$D/rexx" "$T/long.rex" > "$T/long.txt" & sleep 3

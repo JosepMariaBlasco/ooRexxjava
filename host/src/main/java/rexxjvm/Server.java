@@ -35,17 +35,26 @@ import java.util.concurrent.atomic.AtomicInteger;
  * running.
  *
  * <p>The protocol, big-endian, strings as an int length and UTF-8 bytes. The client
- * sends {@code "RXJ1"}, its pid and ppid, its current directory, its arguments (count,
- * then each), its environment ({@code NAME=value}: count, then each), and for its
+ * sends {@code "RXJ2"}, its pid and ppid, its current directory, its arguments (count,
+ * then each), its environment ({@code NAME=value}: count, then each), for its
  * standard input, output and error a kind ({@code 'T'} a terminal, {@code 'F'} a
- * regular file, {@code 'P'} anything else) and, for a regular file, its offset. The
- * server opens them itself, as {@code /proc/PID/fd/0}, {@code 1} and {@code 2} (Linux;
- * the same user): output to a regular file is appended (the client then moves its
- * offset to the end), input from one starts at the client's offset. The commands the
- * program runs get the same files. Then the client may send {@code 'S'} and a signal
- * number, any number of times (a HALT, as natively), and the server answers once
- * {@code 'X'}, the exit code, and the offset its standard input reached (-1 if not a
- * regular file). If the client goes away first, the run is ended.
+ * regular file, {@code 'P'} anything else) and, for a regular file, its offset, and
+ * the mode: {@code 'P'} or {@code 'R'}.
+ *
+ * <p>{@code 'P'}, /proc (Linux, the default there): the server opens the client's
+ * streams itself, as {@code /proc/PID/fd/0}, {@code 1} and {@code 2} (the same user may):
+ * output to a regular file is appended (the client then moves its offset to the end),
+ * input from one starts at the client's offset. The commands the program runs get the
+ * same files. Then the client may send {@code 'S'} and a signal number, any number of
+ * times (a HALT, as natively), and the server answers once {@code 'X'}, the exit code,
+ * and the offset its standard input reached (-1 if not a regular file).
+ *
+ * <p>{@code 'R'}, relayed (where there is no {@code /proc}; on Linux when the client is
+ * asked to, {@code REXXJ_SERVER_RELAY}): the streams go through the socket as frames,
+ * and the client runs the program's commands itself ({@link Relay}); it ends with the
+ * same {@code 'X'}.
+ *
+ * <p>If the client goes away first, the run is ended.
  */
 public final class Server {
     private Server() {}
@@ -179,7 +188,7 @@ public final class Server {
             byte[] magic = w.bytes(4);
             String m = new String(magic, StandardCharsets.US_ASCII);
             if (m.equals("RXJS")) stop(c);
-            if (!"RXJ1".equals(m)) return;
+            if (!"RXJ2".equals(m)) return;
             int pid = w.readInt(), ppid = w.readInt();
             String cwd = w.string();
             List<String> args = new ArrayList<>();
@@ -196,15 +205,7 @@ public final class Server {
                 kind[fd] = (char) w.bytes(1)[0];
                 offset[fd] = w.readLong();
             }
-
-            String proc = "/proc/" + pid + "/fd/";
-            FileChannel in = FileChannel.open(Path.of(proc + 0), StandardOpenOption.READ);
-            open.add(in);
-            if (kind[0] == 'F' && offset[0] > 0) in.position(offset[0]);
-            FileChannel out = output(Path.of(proc + 1), kind[1]);
-            open.add(out);
-            FileChannel err = output(Path.of(proc + 2), kind[2]);
-            open.add(err);
+            boolean relayed = w.bytes(1)[0] == 'R';
 
             Run.Options o = new Run.Options();
             o.args = args;
@@ -212,29 +213,56 @@ public final class Server {
             o.cwd = cwd;
             o.pid = pid;
             o.ppid = ppid;
-            o.in = Channels.newInputStream(in);
-            o.out = Channels.newOutputStream(out);
-            o.err = Channels.newOutputStream(err);
             o.inTty = kind[0] == 'T';
             o.outTty = kind[1] == 'T';
             o.errTty = kind[2] == 'T';
-            o.cmdIn = ProcessBuilder.Redirect.from(new File(proc + 0));
-            o.cmdOut = ProcessBuilder.Redirect.appendTo(new File(proc + 1));
-            o.cmdErr = ProcessBuilder.Redirect.appendTo(new File(proc + 2));
+            FileChannel in = null;
+            Relay relay = null;
+            if (relayed) {
+                // the client's streams through the socket, its commands run by the client
+                relay = new Relay(c);
+                open.add(relay::close);
+                o.relay = relay;
+                o.in = relay.in;
+                o.out = relay.out;
+                o.err = relay.err;
+            } else {
+                // the client's streams opened here, as the same user may on Linux
+                String proc = "/proc/" + pid + "/fd/";
+                in = FileChannel.open(Path.of(proc + 0), StandardOpenOption.READ);
+                open.add(in);
+                if (kind[0] == 'F' && offset[0] > 0) in.position(offset[0]);
+                FileChannel out = output(Path.of(proc + 1), kind[1]);
+                open.add(out);
+                FileChannel err = output(Path.of(proc + 2), kind[2]);
+                open.add(err);
+                o.in = Channels.newInputStream(in);
+                o.out = Channels.newOutputStream(out);
+                o.err = Channels.newOutputStream(err);
+                o.cmdIn = ProcessBuilder.Redirect.from(new File(proc + 0));
+                o.cmdOut = ProcessBuilder.Redirect.appendTo(new File(proc + 1));
+                o.cmdErr = ProcessBuilder.Redirect.appendTo(new File(proc + 2));
+                if (kind[0] == 'F') o.inFile = in;
+            }
             // the run's Java side in a class loader of its own: BSF4ooRexx and the client's
             // CLASSPATH, as rexxj puts them on its class path; nothing of it is shared
             // with other runs (BSF4ooRexx's statics, the client's classes)
             URLClassLoader loader = loader(env.get("CLASSPATH"), cwd, pid);
             open.add(loader);
             o.loader = loader;
-            if (kind[0] == 'F') o.inFile = in;
             Thread.currentThread().setContextClassLoader(loader);
             Run run = new Run(o);
             runs.add(run);
             open.add(() -> runs.remove(run));
 
-            // the client's signals, and its going away
+            // the client's signals (and, relayed, the rest of its frames), and its going away
+            Relay r = relay;
             Thread listener = new Thread(() -> {
+                if (r != null) {
+                    r.listen(w, run);
+                    if (!run.ended()) run.end(128 + 9);
+                    return;
+                }
                 try {
                     for (;;) {
                         byte[] b = w.bytes(1);
@@ -254,6 +282,10 @@ public final class Server {
             Thread.interrupted();                     // end() may have interrupted this thread
             run.awaitThreads(5, TimeUnit.SECONDS);
             endJavaThreads(loader, 2, TimeUnit.SECONDS);
+            if (relay != null) {
+                relay.exit(rc);
+                return;
+            }
             long inAt = -1;
             if (kind[0] == 'F') {
                 try { inAt = in.position(); } catch (IOException x) { /* closed by an interrupt */ }
