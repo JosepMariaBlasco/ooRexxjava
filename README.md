@@ -41,7 +41,10 @@ With the threads' C stack at 256 KB (`suite-jvm-r13346-threadstack.csv`):
 again, and `ProcessInvocation` went over the 300 s limit (253 s on the run
 before), on a machine slower than usual at the time (rexxcps 10-15% below
 its own earlier figure); the slow groups, run alone, take the same with
-8 MB and with 256 KB.
+8 MB and with 256 KB. On Endive 1.2.0, through the warm JVM (`REXXJ_SERVER`,
+`suite-jvm-r13346-endive-server.csv`, 03/11/2026): 404 of 405, only
+`rxsubcom` failing, which fails through the warm JVM with Chicory too
+(`rxsubcom` not found as a command) and passes without it.
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
