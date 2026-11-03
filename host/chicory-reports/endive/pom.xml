@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>repro</groupId><artifactId>endive-repro</artifactId><version>1</version>
+  <properties>
+    <maven.compiler.release>11</maven.compiler.release>
+    <chicory.version>1.2.0</chicory.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+  <dependencies>
+    <dependency><groupId>run.endive</groupId><artifactId>runtime</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>run.endive</groupId><artifactId>wasi</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>run.endive</groupId><artifactId>compiler</artifactId><version>${chicory.version}</version></dependency>
+  </dependencies>
+</project>

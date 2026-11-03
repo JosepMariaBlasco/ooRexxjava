@@ -48,3 +48,18 @@ With 128, Chicory's `compiler-tests` (the spec test suite at
 
 `PATCHED_COMPILER=path/to/compiler-1.7.5-orx1.jar` (made by
 `scripts/chicory-compiler.sh`) adds a run with our patched 1.7.5 compiler.
+
+## Endive
+
+Chicory's development continues as Endive (`bytecodealliance/endive`, Maven
+`run.endive`), a fork hosted by the Bytecode Alliance since May 2026.
+`endive/` is the same runner for it (`run.endive` packages, version 1.2.0):
+
+```bash
+cd host/chicory-reports/endive && mvn -q package dependency:build-classpath -Dmdep.outputFile=cp.txt
+java -cp target/endive-repro-1.jar:$(cat cp.txt) repro.Run [--compile] module.wasm hostDir [args...]
+```
+
+On Endive 1.2.0 (`main` at `03bf3d8` differs from it only in `filestat`'s
+attribute list) every result above is the same; `call_indirect`: 155 ns per
+call, 40 with `-XX:-DontCompileHugeMethods` (medians of 5).
