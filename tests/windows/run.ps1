@@ -21,6 +21,9 @@ function Info($name, $file) {
 # the checks read standard output only (JDK 24+ warn on standard error about Unsafe, JEP 498)
 $out = & $rexx -e "say 'hi'" 2>$null
 Check "say" "hi" ($out -join "|")
+# nothing on standard error: no "Picked up", no Unsafe warning (rexxj.cmd allows it on Java 23+)
+$err = & $rexx -e "say 'hi'" 2>&1 1>$null
+Check "no warnings" "" ($err -join "|")
 $out = & $rexx args.rex "x  y" 2>$null
 Check "argument" "[x  y]" ($out -join "|")
 Check "exit code" 7 $LASTEXITCODE

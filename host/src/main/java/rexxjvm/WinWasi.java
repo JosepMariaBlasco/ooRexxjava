@@ -30,7 +30,7 @@ import java.util.stream.Stream;
  * real path stands for them), one link, ctime as the modification time. Endive's
  * descriptors (which path an fd is) are read by reflection; a descriptor with no path
  * (the standard streams) goes to Endive's own function, which handles it without the
- * unix view.
+ * unix view. Reported: bytecodealliance/endive#280; drop this when a release fixes it.
  */
 final class WinWasi {
     // WASI's errno values and file types (wasi_snapshot_preview1)

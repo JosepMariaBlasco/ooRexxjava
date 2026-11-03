@@ -313,10 +313,14 @@ with `PATHEXT`. There is no `ADDRESS CMD`: the Unix interpreter does not have it
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
-three functions that need it on Windows. The warm JVM (`rexxjs`) is not there yet:
-`REXXJ_SERVER` is ignored. JDK 24 and later warn about `Unsafe` on every run
-(`REXXJ_JAVA_OPTIONS=--sun-misc-unsafe-memory-access=allow`: "Speed"); on Windows
-there is no fallback without it (a mapped file there cannot be deleted while open).
+three functions that need it on Windows (reported: bytecodealliance/endive#280).
+The warm JVM (`rexxjs`) is not there yet: `REXXJ_SERVER` is ignored. `Unsafe`:
+on Java 23 and later the launchers pass `--sun-misc-unsafe-memory-access=allow`,
+so that JDK 24 and later do not warn on every run (the version is read from the
+`release` file of the `java` in `PATH`; without one, as behind Oracle's
+`javapath` shim, the option is not passed and the warning shows). On Windows
+there is no fallback without `Unsafe` (a mapped file there cannot be deleted
+while open).
 
 ## Speed
 
