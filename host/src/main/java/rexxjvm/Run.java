@@ -286,7 +286,15 @@ final class Run {
         // orxWasiThreadStack): -Drexxjvm.threadstack=1M, else REXXJVM_THREADSTACK
         String threadStack = System.getProperty("rexxjvm.threadstack");
         if (threadStack != null) ob.withEnvironment("REXXJVM_THREADSTACK", threadStack);
-        wasi = WasiPreview1.builder().withOptions(ob.build()).build();
+        // -Drexxjvm.wasi.log=true: Endive's log of every WASI call, to standard error
+        WasiPreview1.Builder wb = WasiPreview1.builder().withOptions(ob.build());
+        if (Boolean.getBoolean("rexxjvm.wasi.log")) wb.withLogger(new run.endive.log.Logger() {
+            @Override public void log(Level level, String msg, Throwable t) {
+                System.err.println("wasi " + level + " " + msg + (t != null ? " " + t : ""));
+            }
+            @Override public boolean isLoggable(Level level) { return true; }
+        });
+        wasi = wb.build();
 
         memory = FlatMemory.create(module.memoryImport.limits());   // FlatMemory, unless -Drexxjvm.memory=bytearray
 

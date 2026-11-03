@@ -28,5 +28,13 @@ Check "relative file" "2 line one / line two|0 1" ($out -join "|")
 Info "what it sees" info.rex
 Info "commands" cmd.rex
 Info "BSF4ooRexx" ..\bsf\basics.rex
-if ($fails) { "$fails check(s) failed"; exit 1 }
+if ($fails) {
+    # what the module asked of WASI (Endive's log), for the first failures
+    "---- trace: WASI calls of rexx -e ""say 'hi'"" (Endive's log; paths and fds)"
+    $env:REXXJ_JAVA_OPTIONS = "-Drexxjvm.wasi.log=true"
+    & $rexx -e "say 'hi'" 2>&1 | Select-String -Pattern "prestat|path_|fd_filestat|fd_open|errno|Error|error" |
+        Select-Object -First 80 | ForEach-Object { "     $_" }
+    $env:REXXJ_JAVA_OPTIONS = $null
+    "$fails check(s) failed"; exit 1
+}
 "all checks passed"
