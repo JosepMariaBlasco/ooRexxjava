@@ -1,5 +1,5 @@
 #!/bin/bash
-# Rebuild ooRexx for WASI (wasm32-wasip1-threads) and the Chicory launcher.
+# Rebuild ooRexx for WASI (wasm32-wasip1-threads) and the Java launcher (Endive).
 # Needs: svn, git, cmake, make, Java 11+ and Maven, network for wasi-sdk 34, GitHub and Maven Central.
 set -e
 HERE=$(cd "$(dirname "$0")" && pwd)
@@ -9,7 +9,7 @@ mkdir -p "$WORK" && cd "$WORK"
 W=$WORK/wasi-sdk-34.0-x86_64-linux
 # oorexxwasm's generic WebAssembly layer (its 0001, the only patch a WASI build applies),
 # from a fixed commit (its HEAD moves with the family's revision)
-OOREXXWASM_REV=62f59308e98f105116b7935e6678a245d86e8eb0
+OOREXXWASM_REV=4639d9d959663cefeee32305288ef607e282f165
 if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; then
   rm -rf oorexxwasm && git init -q oorexxwasm
   git -C oorexxwasm fetch -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$OOREXXWASM_REV"
@@ -26,7 +26,7 @@ if [ "$(git -C BSF4ooRexx rev-parse HEAD 2>/dev/null)" != "$BSF_REV" ]; then
 fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
-  svn export -q -r 13346 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
+  svn export -q -r 13358 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
   (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-generic-layer.patch \
                  && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
   mv oorexx.tmp oorexx

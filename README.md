@@ -8,8 +8,9 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13346 (the
-ooRexx family's revision), built
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13358 (the
+ooRexx family's revision since 03/11/2026; r13346 before, which the figures
+below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
 conditions, streams, the queue, `SysFileTree`, `INTERPRET` and
@@ -45,6 +46,12 @@ its own earlier figure); the slow groups, run alone, take the same with
 `suite-jvm-r13346-endive-server.csv`, 03/11/2026): 404 of 405, only
 `rxsubcom` failing, which fails through the warm JVM with Chicory too
 (`rxsubcom` not found as a command) and passes without it.
+On ooRexx r13358 with test/trunk r13359 (03/11/2026, Endive, through the warm
+JVM, `suite-jvm-r13358-server.csv`): 404 of 405 in 3 min 20 s, 24,440 tests,
+again only `rxsubcom`; it and `ProcessInvocation` (60 tests, with the six new
+`Terminate()` cases of #2107, `testbinaries/detach_root_terminate`, one more
+tool of `dist-test`'s `rexx.wasm`) pass without the warm JVM
+(`suite-jvm-r13358-alone-rxsubcom-processinvocation.csv`).
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
@@ -75,7 +82,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13346 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13358 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx from the commit `BSF_REV`

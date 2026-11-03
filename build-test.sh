@@ -14,7 +14,8 @@
 # maps the prefixed names back.  testbinaries/rexxinstance (run as a command by
 # ProcessInvocation and ProcessRexxStart) is one more tool in the same
 # rexx.wasm, through rexx.cpp's weak hook orxWasmExtraTool():
-# rexxj --orx-wasm-rexxinstance, and a dist-test/rexxinstance script.
+# rexxj --orx-wasm-rexxinstance, and a dist-test/rexxinstance script; so is
+# testbinaries/detach_root_terminate (ProcessInvocation's Terminate() tests).
 #
 # Usage: ./build-test.sh [WORK]   (WORK: where ./build.sh built; it must be done)
 # Output: WORK/dist-test, dist/ with this rexx.wasm and its rexxj.jar.
@@ -128,6 +129,9 @@ objects+=("$T/static-libraries.o")
 defs=()
 for c in $CLASHES; do defs+=("-D$c=orxexits__$c"); done
 compile "$SRC/testbinaries/rexxinstance.cpp" "$T/rexxinstance.o" "${defs[@]}" -Dmain=orxWasmRexxinstanceMain
+# detach_root_terminate (ProcessInvocation's Terminate() tests run it as a command;
+# trunk r13349 and later), one more tool: rexxj --orx-wasm-detach_root_terminate
+compile "$SRC/testbinaries/detach_root_terminate.cpp" "$T/detach_root_terminate.o" -Dmain=orxWasmDetachRootTerminateMain
 # the mini-JNI's test (tests/jni/), one more tool: rexxj --orx-wasm-jnitest
 JNI_INCLUDE=$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")/include
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -I "$C/jni" -I "$JNI_INCLUDE" \
@@ -135,6 +139,7 @@ JNI_INCLUDE=$(dirname "$(dirname "$(readlink -f "$(command -v javac)")")")/inclu
 cat > "$T/extra-tool.cpp" <<'CPP'
 #include <string.h>
 int orxWasmRexxinstanceMain(int argc, char **argv);
+int orxWasmDetachRootTerminateMain(int argc, char **argv);
 extern "C" int orxWasmJnitestMain(int argc, char **argv);
 // rexx.cpp: the tools a build adds (rexxj --orx-wasm-TOOL)
 extern "C" bool orxWasmExtraTool(const char *tool, int argc, char **argv, int *rc)
@@ -142,6 +147,11 @@ extern "C" bool orxWasmExtraTool(const char *tool, int argc, char **argv, int *r
     if (strcmp(tool, "rexxinstance") == 0)
     {
         *rc = orxWasmRexxinstanceMain(argc, argv);
+        return true;
+    }
+    if (strcmp(tool, "detach_root_terminate") == 0)
+    {
+        *rc = orxWasmDetachRootTerminateMain(argc, argv);
         return true;
     }
     if (strcmp(tool, "jnitest") == 0)
@@ -153,14 +163,14 @@ extern "C" bool orxWasmExtraTool(const char *tool, int argc, char **argv, int *r
 }
 CPP
 compile "$T/extra-tool.cpp" "$T/extra-tool.o"
-objects+=("$T/rexxinstance.o" "$T/jnitest.o" "$T/extra-tool.o")
+objects+=("$T/rexxinstance.o" "$T/detach_root_terminate.o" "$T/jnitest.o" "$T/extra-tool.o")
 
 # relink rexx_exe's own command with the objects, into bin-test/rexx
 mkdir -p "$BUILD/bin-test"
 LINK=$(sed "s| -o bin/rexx | ${objects[*]} -o bin-test/rexx |" "$BUILD/CMakeFiles/rexx_exe.dir/link.txt")
 (cd "$BUILD" && eval "$LINK")
 
-# dist-test: dist/ with this rexx.wasm, its rexxj.jar, and rexxinstance
+# dist-test: dist/ with this rexx.wasm, its rexxj.jar, rexxinstance and detach_root_terminate
 rm -rf "$WORK/dist-test" && cp -a "$WORK/dist" "$WORK/dist-test"
 cp "$BUILD/bin-test/rexx" "$WORK/dist-test/rexx.wasm"
 "$HERE/scripts/endive-compiler.sh"   # Endive's compiler, patched (host/chicory-patch)
@@ -168,6 +178,8 @@ cp "$BUILD/bin-test/rexx" "$WORK/dist-test/rexx.wasm"
 cp "$HERE/host/target/rexxj.jar" "$WORK/dist-test/"
 printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-rexxinstance "$@"\n' > "$WORK/dist-test/rexxinstance"
 chmod +x "$WORK/dist-test/rexxinstance"
+printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-detach_root_terminate "$@"\n' > "$WORK/dist-test/detach_root_terminate"
+chmod +x "$WORK/dist-test/detach_root_terminate"
 # the mini-JNI's test, with the Java class it calls
 mkdir -p "$WORK/dist-test/jnitest-classes"
 javac -d "$WORK/dist-test/jnitest-classes" "$HERE/tests/jni/jnitest/JniTarget.java"
