@@ -4,6 +4,7 @@
 (`host/.../Run.java`), each with its own arguments, environment, current
 directory and standard streams (captured), and checks:
 
+- the first 3 runs of the JVM, built at once (the imports must be whole);
 - 12 runs one after another, each with its own output (and how long each
   takes: the first pays for the JIT);
 - the exit code; the environment, the current directory and a command's
@@ -23,7 +24,7 @@ env -u JAVA_TOOL_OPTIONS java -Xss16m -Drexxjvm.executable=$D/rexx -Drexxjvm.hom
     -cp out:$D/rexxj.jar rexxjvm.MultiRun
 ```
 
-Result (03/11/2026, compiled machine, Java 21, 2 cores): `9 checks, 0
-failures`; the 12 runs took 744 ms the first, 60–119 ms the others; the run
+Result (03/11/2026, compiled machine, Java 21, 2 cores): `10 checks, 0
+failures` (9 before the first check was added); the 12 runs took 744 ms the first, 60–119 ms the others; the run
 ended from outside stopped in 2 ms with no threads left; 13 memories, all
 collected.

@@ -447,7 +447,7 @@ suite) needs the launcher's state per run first; this is that step.
   `WeakHashMap` keyed by the `Instance`, whose values refer to it: no entry was
   ever freed, so every foreign entry (about 6.7 per JSR-223 `invokeFunction`)
   kept its `Instance` alive. Now a per-thread cache.
-- **Results** (`tests/multirun/`, 2 cores, Java 21): 9 checks, all pass: 12
+- **Results** (`tests/multirun/`, 2 cores, Java 21): 9 checks (10 since the server, below), all pass: 12
   runs one after another (744 ms the first, 60–119 ms the others), each its
   own output; the exit code; environment, current directory and a command's
   output; standard input and error; 20 runs on 4 threads at once; a run with
