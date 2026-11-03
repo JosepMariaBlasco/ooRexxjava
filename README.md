@@ -255,7 +255,7 @@ rexx program.rex        # the first time ~2 s (the server starts); then ~0.1 s
 
 For now it is meant for running many short programs, ooRexx's test suite above
 all: through it the suite takes 4 minutes and a half instead of about 21
-(404/405 groups pass), and the Rexx Parser checking one of its files about
+(404/405 groups pass; natively 2 min 24 s: about twice as fast), and the Rexx Parser checking one of its files about
 4 s instead of 9 (natively 2.4). What differs from `rexxj`: programs share one JVM (a crash or an
 `OutOfMemoryError` affects all of them); commands a program runs read the
 client's input from the start of a regular file; and BSF4ooRexx's Java side is

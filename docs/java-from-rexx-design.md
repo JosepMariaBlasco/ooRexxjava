@@ -495,7 +495,14 @@ The first use of runs: a minimal server and client, meant for the suite first.
   300 s limit): **404/405 in 4 min 24 s** (`results/suite-jvm-r13346-server.csv`;
   the groups' times add up to 430 s), against 400/405 and about 21 minutes
   with `rexxj` (2,495 s). `ProcessInvocation`, over 300 s every time until now,
-  passes in 22 s; `scclient`, `sfclient` and `TRACE_TraceObject` pass too. Left:
+  passes in 22 s; `scclient`, `sfclient` and `TRACE_TraceObject` pass too.
+  Natively (the r13346 `.deb`, same machine and settings,
+  `results/suite-native-r13346.csv`): 2 min 24 s, 394/405 (the `.deb` lacks the
+  suite's test libraries: nine API groups; and `CHAROUT`, `LINEOUT`). On the 390
+  groups that pass everywhere: native 182 s, server 358 s (x2.0), `rexxj` 1,993 s
+  (x11); wall time x1.8. Groups that wait (`samples`, `Alarm`, sockets) take the
+  same; groups that compute show the raw speed: `CALL` 2 s vs 41, `DateTime` 10
+  vs 45, `Array` 2 vs 10. Left:
   `TRACE`'s `TEST_TRACE_LABEL_WITH_FORWARD`, as with `rexxj`. The Rexx
   Parser 0.7's `elident` on `Scanner.cls` and `Clauses.cls`: 3.9–4.8 s
   through the server once warm (the first 4.8–8.1 s), 8.2–9.8 s with `rexxj`,
