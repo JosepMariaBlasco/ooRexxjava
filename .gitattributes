@@ -1,0 +1,2 @@
+# Windows launchers and scripts keep CRLF in every checkout
+*.cmd text eol=crlf

@@ -1,0 +1,62 @@
+# rexxj on Windows (step 3 of the warm JVM's plan, docs/java-from-rexx-design.md):
+# a Linux job builds rexxj.jar over the rexx.wasm of the saved build (branch
+# saved-build: the C side is not rebuilt here), a Windows job runs tests/windows.
+name: windows
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The saved build's dist, if its C inputs are this checkout's
+        run: |
+          git fetch -q --depth 1 origin saved-build
+          mkdir -p "$RUNNER_TEMP/saved" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/saved"
+          # what rexx.wasm is made from (scripts/saved-build.sh's MANIFEST); build.sh
+          # is left out: it builds the jar and the launchers too
+          C=' (0001-[^ ]*\.patch|wasi-p1-threads\.cmake|compat/.*)$'
+          grep -E "$C" "$RUNNER_TEMP/saved/MANIFEST" > "$RUNNER_TEMP/saved.c"
+          (git ls-files -- 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat \
+             | LC_ALL=C sort | xargs sha256sum) | grep -E "$C" > "$RUNNER_TEMP/now.c"
+          diff "$RUNNER_TEMP/saved.c" "$RUNNER_TEMP/now.c" \
+            || { echo "::error::the saved build is for other C sources: rebuild and publish it"; exit 1; }
+          tar -xzf "$RUNNER_TEMP/saved/oorexxjava-dist.tar.gz" dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: rexxj.jar
+        run: |
+          scripts/endive-compiler.sh
+          (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$GITHUB_WORKSPACE/dist/rexx.wasm")
+          cp host/target/rexxj.jar dist/
+          cp launchers/windows/*.cmd dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+  test:
+    needs: jar
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [21, 25]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: tests/windows
+        shell: pwsh
+        run: tests/windows/run.ps1 dist
