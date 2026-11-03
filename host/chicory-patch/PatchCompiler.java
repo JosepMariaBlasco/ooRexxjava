@@ -1,7 +1,12 @@
 import java.nio.file.*;
 import org.objectweb.asm.*;
 
-/** Experiment: lower Chicory 1.7.5's call_indirect switch sizes in Compiler.compileCallIndirect. */
+/**
+ * Lowers the two sizes in Chicory 1.7.5's Compiler.compileCallIndirect (1,024 cases in one
+ * switch, blocks of 4,096 beyond), so that the call_indirect dispatch methods stay under
+ * HotSpot's 8,000-byte JIT limit (README.md). Usage: PatchCompiler IN OUT INLINE CHUNK.
+ * Fails unless it finds exactly those two constants: a newer Chicory needs looking at.
+ */
 public class PatchCompiler {
     public static void main(String[] a) throws Exception {
         byte[] in = Files.readAllBytes(Path.of(a[0]));
@@ -22,7 +27,10 @@ public class PatchCompiler {
                 };
             }
         }, 0);
+        if (n[0] != 2) {
+            System.err.println("PatchCompiler: expected 2 constants in compileCallIndirect, found " + n[0]);
+            System.exit(1);
+        }
         Files.write(Path.of(a[1]), cw.toByteArray());
-        System.out.println("patched constants: " + n[0]);
     }
 }

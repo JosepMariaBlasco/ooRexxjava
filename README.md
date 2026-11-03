@@ -220,19 +220,29 @@ now, 1 ms natively: mostly the interpreter's speed).
 
 ## Speed
 
-Chicory translates the module to JVM bytecode, one method per wasm function,
-and HotSpot never JIT-compiles a method over 8,000 bytes of bytecode: some of
-the interpreter's functions become such methods and run interpreted by the JVM
-for ever. `-XX:-DontCompileHugeMethods` lifts that limit: `rexxcps` goes from
-about 0.56 to 1.0 M clauses/s (1.2 M with `FlatMemory`). It is not on by
-default, because compiling those methods makes start-up slower (some tests of
-ooRexx's suite give a server 0.5 s to start, and then fail); for long runs:
+`rexxcps`, 2 cores, Java 21: about 1.9–2.0 M clauses/s; natively, ooRexx
+r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
+0.56 M (02/11/2026):
+
+- **Chicory's compiler, patched** (`host/chicory-patch/`). Chicory translates
+  the module to JVM bytecode, and HotSpot never JIT-compiles a method over
+  8,000 bytes of bytecode. Chicory 1.7.5 dispatches indirect calls (every C++
+  virtual call) through one `switch` per function signature with up to 1,024
+  cases, over that limit: those methods ran interpreted for ever. The patch
+  lowers two constants of Chicory's compiler (1,024 to 128, 4,096 to 512);
+  `scripts/chicory-compiler.sh` (run by `build.sh`) installs it in the local
+  Maven repository as `com.dylibso.chicory:compiler:1.7.5-orx1`, from the
+  official jar, which is not touched. 0.63 to 1.88 M.
+- **`FlatMemory`**: the linear memory as one flat block outside the heap (see
+  "Threads and their stacks").
+
+`-XX:-DontCompileHugeMethods`, which lifts HotSpot's limit for every method,
+no longer helps (1.75 M) and makes start-up slower; `REXXJ_JAVA_OPTIONS`
+passes options like it to the JVM if wanted:
 
 ```bash
-REXXJ_JAVA_OPTIONS=-XX:-DontCompileHugeMethods rexxj program.rex
+REXXJ_JAVA_OPTIONS=-Xmx4g rexxj program.rex
 ```
-
-Natively, ooRexx runs `rexxcps` at 9.7–10.7 M clauses/s on the same machine.
 
 ## Threads and their stacks
 
@@ -267,10 +277,11 @@ per thread").
 | `build.sh` | Rebuilds everything from scratch. |
 | `build-test.sh` | Builds `dist-test/`, the variant with the test suite's native libraries. |
 | `scripts/saved-build.sh` | Saves the build on the branch `saved-build` and restores it. |
+| `scripts/chicory-compiler.sh` | Installs Chicory's compiler with the patch of `host/chicory-patch/` in the local Maven repository (`build.sh` runs it). |
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
-| `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time). |
+| `host/` | The Java launcher (Maven; Chicory's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Chicory's compiler, README "Speed"). |
 | `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
 | `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |

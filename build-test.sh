@@ -163,6 +163,7 @@ LINK=$(sed "s| -o bin/rexx | ${objects[*]} -o bin-test/rexx |" "$BUILD/CMakeFile
 # dist-test: dist/ with this rexx.wasm, its rexxj.jar, and rexxinstance
 rm -rf "$WORK/dist-test" && cp -a "$WORK/dist" "$WORK/dist-test"
 cp "$BUILD/bin-test/rexx" "$WORK/dist-test/rexx.wasm"
+"$HERE/scripts/chicory-compiler.sh"   # Chicory's compiler, patched (host/chicory-patch)
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$WORK/dist-test/rexx.wasm")
 cp "$HERE/host/target/rexxj.jar" "$WORK/dist-test/"
 printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-rexxinstance "$@"\n' > "$WORK/dist-test/rexxinstance"

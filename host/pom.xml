@@ -4,13 +4,16 @@
   <properties>
     <maven.compiler.release>11</maven.compiler.release>
     <chicory.version>1.7.5</chicory.version>
+    <!-- Chicory's compiler with its call_indirect dispatch in smaller methods, installed in the
+         local Maven repository by scripts/chicory-compiler.sh (host/chicory-patch/README.md) -->
+    <chicory.compiler.version>1.7.5-orx1</chicory.compiler.version>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <dependencies>
     <dependency><groupId>com.dylibso.chicory</groupId><artifactId>runtime</artifactId><version>${chicory.version}</version></dependency>
     <dependency><groupId>com.dylibso.chicory</groupId><artifactId>wasi</artifactId><version>${chicory.version}</version></dependency>
     <!-- the compiler brings ASM, which rexxjvm.Natives uses too -->
-    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.compiler.version}</version></dependency>
   </dependencies>
   <build><plugins>
     <plugin><groupId>org.apache.maven.plugins</groupId><artifactId>maven-shade-plugin</artifactId><version>3.6.0</version>
@@ -29,6 +32,7 @@
         <finalName>rexxj</finalName>
         <plugins>
           <plugin><groupId>com.dylibso.chicory</groupId><artifactId>chicory-compiler-maven-plugin</artifactId><version>${chicory.version}</version>
+            <dependencies><dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.compiler.version}</version></dependency></dependencies>
             <executions><execution><goals><goal>compile</goal></goals>
               <configuration>
                 <name>rexxjvm.RexxModule</name>

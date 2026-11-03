@@ -1,4 +1,4 @@
-# Chicory's call_indirect dispatch, in smaller methods (experiment, 02/11/2026)
+# Chicory's call_indirect dispatch, in smaller methods (02/11/2026)
 
 HotSpot never JIT-compiles a method over 8,000 bytes of bytecode
 (`-XX:+DontCompileHugeMethods`, the default). Chicory 1.7.5's compiler
@@ -14,15 +14,19 @@ hot: every C++ virtual call goes through them (JFR, `rexxcps` without the flag:
 
 `PatchCompiler.java` rewrites, with ASM, the two constants in
 `compileCallIndirect` of Chicory's `Compiler.class` (1,024 -> 128, 4,096 ->
-512). Used for the experiment by putting the patched `compiler-1.7.5.jar` in
-`~/.m2` for one `mvn -Pembedded` build, then restoring the original.
+512), and fails unless it finds exactly those two (a newer Chicory needs
+looking at). `scripts/chicory-compiler.sh`, which `build.sh` and
+`build-test.sh` run first, makes from the official `compiler-1.7.5.jar` (not
+touched) a `compiler-1.7.5-orx1.jar` with the patched class and the same
+dependencies, and installs it in the local Maven repository; `host/pom.xml`
+uses that version (`chicory.compiler.version`) both for the plugin that
+translates `rexx.wasm` at build time and in `rexxj.jar` (for a `.wasm` given at
+run time). Nothing is done if it is already installed.
 
-```bash
-javac -cp asm-9.9.1.jar PatchCompiler.java
-java -cp asm-9.9.1.jar:. PatchCompiler Compiler.class Compiler.class 128 512
-```
+When Chicory makes those sizes depend on the bytecode, or configurable (to be
+reported, Josep Maria's decision), this goes.
 
-Results (2 cores, Java 21, `FlatMemory`, no JVM flag): `rexxcps` 1.87-1.89 M
+Results of the experiment (2 cores, Java 21, `FlatMemory`, no JVM flag): `rexxcps` 1.87-1.89 M
 clauses/s, against 0.63 M unpatched (1.19 M unpatched with
 `-XX:-DontCompileHugeMethods`; 1.75 M patched with it). Start-up the same
 (`hello.rex` 1.0-1.1 s). Methods still over 8,000 bytes: `func_3002`

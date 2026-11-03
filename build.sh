@@ -32,6 +32,7 @@ if [ ! -d oorexx ]; then
   mv oorexx.tmp oorexx
 fi
 # the Java launcher (Chicory 1.7.5)
+"$HERE/scripts/chicory-compiler.sh"   # Chicory's compiler, patched (host/chicory-patch)
 (cd "$HERE/host" && mvn -q -B clean package -DskipTests)
 JAR=$HERE/host/target/rexxjvm-0.1.jar
 printf '#!/bin/sh\nexec java -jar %s "$@"\n' "$JAR" > runwasm; chmod +x runwasm

@@ -393,7 +393,7 @@ with `getInterface`, bindings, the context's writer, errors as
 `jniUnregisterRexxObject`); creating their `Instance`s is about 16% of the time
 (JFR), the rest is the interpreter running. A native BSF4ooRexx takes 1.0–1.1
 ms (about 19 times less; about 16 without the `Instance`s, the ratio of
-`rexxcps`). So pre-created entry threads would save little here; the
+`rexxcps`; since Chicory's compiler is patched, README "Speed", 11.9 ms). So pre-created entry threads would save little here; the
 interpreter's raw speed is what matters. Natively, BSF4ooRexx's `testUnits`
 give exactly our counts, and the errors seen with their old framework too
 (`tests/bsf/README.md`).
