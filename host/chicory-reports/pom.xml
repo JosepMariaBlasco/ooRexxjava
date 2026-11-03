@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0">
+  <modelVersion>4.0.0</modelVersion>
+  <groupId>repro</groupId><artifactId>chicory-repro</artifactId><version>1</version>
+  <properties>
+    <maven.compiler.release>11</maven.compiler.release>
+    <chicory.version>1.7.5</chicory.version>
+    <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
+  </properties>
+  <dependencies>
+    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>runtime</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>wasi</artifactId><version>${chicory.version}</version></dependency>
+    <dependency><groupId>com.dylibso.chicory</groupId><artifactId>compiler</artifactId><version>${chicory.version}</version></dependency>
+  </dependencies>
+</project>
