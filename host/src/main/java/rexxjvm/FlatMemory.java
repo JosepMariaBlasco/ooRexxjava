@@ -11,13 +11,11 @@ import com.dylibso.chicory.wasm.types.DataSegment;
 import com.dylibso.chicory.wasm.types.MemoryLimits;
 import com.dylibso.chicory.wasm.types.PassiveDataSegment;
 import java.lang.ref.Cleaner;
-import java.lang.reflect.Field;
 import java.nio.ByteOrder;
 import java.util.Map;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.function.IntBinaryOperator;
 import java.util.function.LongBinaryOperator;
-import sun.misc.Unsafe;
 
 /**
  * The module's linear memory as one flat block outside the Java heap, reserved
@@ -29,9 +27,11 @@ import sun.misc.Unsafe;
  * access is one bounds check and one load. And it allocates every page as soon
  * as the memory grows ({@code byte[65536]} each, in the Java heap), so each
  * thread's C stack, malloc'd from the linear memory and mostly untouched, cost
- * its whole size. Here the block is one {@code malloc} of the maximum size,
- * which the C library serves with {@code mmap}: the operating system gives the
- * pages zero-filled, and only when they are first touched.
+ * its whole size. Here the block is reserved once at the maximum size, and the
+ * operating system gives the pages zero-filled, and only when they are first
+ * touched: a {@link Block}, with {@code sun.misc.Unsafe} on Java 11 to 21 and a
+ * private file mapping through {@code java.lang.foreign} on Java 22 and later
+ * (see {@link Blocks}).
  *
  * <p>Semantics as {@code ByteArrayMemory} (Chicory 1.7.5): accesses beyond the
  * current size trap ({@link WasmRuntimeException}); atomics are sequentially
@@ -41,24 +41,12 @@ import sun.misc.Unsafe;
  * to Chicory's memory (see {@link #create}).
  */
 final class FlatMemory implements Memory {
-    private static final Unsafe U;
-    private static final long BYTE_BASE;
-    static {
-        try {
-            Field f = Unsafe.class.getDeclaredField("theUnsafe");
-            f.setAccessible(true);
-            U = (Unsafe) f.get(null);
-            BYTE_BASE = U.arrayBaseOffset(byte[].class);
-        } catch (ReflectiveOperationException x) {
-            throw new ExceptionInInitializerError(x);
-        }
-    }
     private static final boolean BE = ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN;
     private static final Cleaner CLEANER = Cleaner.create();
 
     private final MemoryLimits limits;
     private final int maxPages;
-    private final long base;                  // address of the block
+    private final Block block;                // the bytes; accesses below are offsets into it
     private volatile int nPages;
     /**
      * The current size in bytes, a plain field read by every access; nPages, volatile,
@@ -84,13 +72,8 @@ final class FlatMemory implements Memory {
         this.limits = limits;
         this.maxPages = Math.min(limits.maximumPages(), RUNTIME_MAX_PAGES);
         long bytes = (long) maxPages * PAGE_SIZE;
-        long b = U.allocateMemory(Math.max(bytes, 8));
-        this.base = b;
-        CLEANER.register(this, () -> U.freeMemory(b));
-        // A block this large comes from mmap, zero-filled. Check a few spots anyway: if
-        // an allocator handed back used memory, clear it all (correct, but no longer lazy).
-        if (bytes > 0 && (U.getLong(b) != 0 || U.getLong(b + bytes / 2) != 0 || U.getLong(b + bytes - 8) != 0))
-            U.setMemory(b, bytes, (byte) 0);
+        this.block = Blocks.create(bytes);
+        CLEANER.register(this, block.releaser());
         this.nPages = limits.initialPages();
         this.limit = nPages * PAGE_SIZE;
         this.waitStates = limits.shared() ? new ConcurrentHashMap<>() : null;
@@ -116,22 +99,22 @@ final class FlatMemory implements Memory {
 
     // ---- bounds ----------------------------------------------------------------------------
 
-    /** The address of an access of n bytes at addr; traps if out of bounds. */
+    /** The offset of an access of n bytes at addr; traps if out of bounds. */
     private long at(int addr, int n) {
         // out of bounds if addr < 0 (getAddr gives a negative address for one past 2 GB)
         // or addr + n > limit; no overflow: limit < 2^31 - 64K, n <= 2^31 - 1
         if ((addr | (limit - n - addr)) < 0) return atSlow(addr, n);
-        return base + addr;
+        return addr;
     }
 
     private long atSlow(int addr, int n) {
         int lim = nPages * PAGE_SIZE;         // the limit field may be stale: check the truth
         if (addr < 0 || n > lim || addr > lim - n) throw outOfBounds(addr, n, lim);
         limit = lim;
-        return base + addr;
+        return addr;
     }
 
-    /** The address of an atomic access of n bytes, which must also be aligned. */
+    /** The offset of an atomic access of n bytes, which must also be aligned. */
     private long atomicAt(int addr, int n) {
         if ((addr & (n - 1)) != 0) throw new WasmRuntimeException("unaligned atomic");
         return at(addr, n);
@@ -148,39 +131,39 @@ final class FlatMemory implements Memory {
         if (size == 0) {
             int lim = nPages * PAGE_SIZE;
             if (Integer.compareUnsigned(addr, lim) > 0) throw outOfBounds(addr, 0, lim);
-            return base + addr;
+            return addr;
         }
         return at(addr, size);
     }
 
     // ---- plain accesses --------------------------------------------------------------------
 
-    @Override public byte read(int addr) { return U.getByte(at(addr, 1)); }
-    @Override public void writeByte(int addr, byte data) { U.putByte(at(addr, 1), data); }
+    @Override public byte read(int addr) { return block.getByte(at(addr, 1)); }
+    @Override public void writeByte(int addr, byte data) { block.putByte(at(addr, 1), data); }
 
     @Override public short readShort(int addr) {
-        short v = U.getShort(at(addr, 2));
+        short v = block.getShort(at(addr, 2));
         return BE ? Short.reverseBytes(v) : v;
     }
     @Override public long readU16(int addr) { return readShort(addr) & 0xFFFFL; }
     @Override public void writeShort(int addr, short data) {
-        U.putShort(at(addr, 2), BE ? Short.reverseBytes(data) : data);
+        block.putShort(at(addr, 2), BE ? Short.reverseBytes(data) : data);
     }
 
     @Override public int readInt(int addr) {
-        int v = U.getInt(at(addr, 4));
+        int v = block.getInt(at(addr, 4));
         return BE ? Integer.reverseBytes(v) : v;
     }
     @Override public void writeI32(int addr, int data) {
-        U.putInt(at(addr, 4), BE ? Integer.reverseBytes(data) : data);
+        block.putInt(at(addr, 4), BE ? Integer.reverseBytes(data) : data);
     }
 
     @Override public long readLong(int addr) {
-        long v = U.getLong(at(addr, 8));
+        long v = block.getLong(at(addr, 8));
         return BE ? Long.reverseBytes(v) : v;
     }
     @Override public void writeLong(int addr, long data) {
-        U.putLong(at(addr, 8), BE ? Long.reverseBytes(data) : data);
+        block.putLong(at(addr, 8), BE ? Long.reverseBytes(data) : data);
     }
 
     @Override public float readFloat(int addr) { return Float.intBitsToFloat(readInt(addr)); }
@@ -195,26 +178,26 @@ final class FlatMemory implements Memory {
     @Override public void write(int addr, byte[] data, int offset, int size) {
         if (offset < 0 || size < 0 || offset > data.length - size)
             throw outOfBounds(offset, size, data.length);
-        U.copyMemory(data, BYTE_BASE + offset, null, range(addr, size), size);
+        block.copyFrom(data, offset, range(addr, size), size);
     }
 
     @Override public byte[] readBytes(int addr, int len) {
         long p = range(addr, len);
         byte[] r = new byte[len];
-        U.copyMemory(null, p, r, BYTE_BASE, len);
+        block.copyTo(p, r, 0, len);
         return r;
     }
 
     @Override public void copy(int dest, int src, int size) {
         long d = range(dest, size), s = range(src, size);
-        U.copyMemory(s, d, size);              // overlapping blocks are fine (memmove)
+        block.copy(s, d, size);              // overlapping blocks are fine (memmove)
     }
 
     @Override public void fill(byte value, int fromIndex, int toIndex) {
-        U.setMemory(range(fromIndex, toIndex - fromIndex), toIndex - fromIndex, value);
+        block.fill(range(fromIndex, toIndex - fromIndex), toIndex - fromIndex, value);
     }
 
-    @Override public void zero() { U.setMemory(base, (long) nPages * PAGE_SIZE, (byte) 0); }
+    @Override public void zero() { block.fill(0, (long) nPages * PAGE_SIZE, (byte) 0); }
 
     // ---- data segments ---------------------------------------------------------------------
 
@@ -246,51 +229,51 @@ final class FlatMemory implements Memory {
 
     // ---- atomics ---------------------------------------------------------------------------
 
-    @Override public void atomicFence() { U.fullFence(); }
+    @Override public void atomicFence() { block.fullFence(); }
 
     @Override public int atomicReadInt(int addr) {
-        int v = U.getIntVolatile(null, atomicAt(addr, 4));
+        int v = block.getIntVolatile(atomicAt(addr, 4));
         return BE ? Integer.reverseBytes(v) : v;
     }
     @Override public long atomicReadLong(int addr) {
-        long v = U.getLongVolatile(null, atomicAt(addr, 8));
+        long v = block.getLongVolatile(atomicAt(addr, 8));
         return BE ? Long.reverseBytes(v) : v;
     }
     @Override public short atomicReadShort(int addr) {
-        short v = U.getShortVolatile(null, atomicAt(addr, 2));
+        short v = block.getShortVolatile(atomicAt(addr, 2));
         return BE ? Short.reverseBytes(v) : v;
     }
-    @Override public byte atomicReadByte(int addr) { return U.getByteVolatile(null, atomicAt(addr, 1)); }
+    @Override public byte atomicReadByte(int addr) { return block.getByteVolatile(atomicAt(addr, 1)); }
 
     @Override public void atomicWriteInt(int addr, int v) {
-        U.putIntVolatile(null, atomicAt(addr, 4), BE ? Integer.reverseBytes(v) : v);
+        block.putIntVolatile(atomicAt(addr, 4), BE ? Integer.reverseBytes(v) : v);
     }
     @Override public void atomicWriteLong(int addr, long v) {
-        U.putLongVolatile(null, atomicAt(addr, 8), BE ? Long.reverseBytes(v) : v);
+        block.putLongVolatile(atomicAt(addr, 8), BE ? Long.reverseBytes(v) : v);
     }
     @Override public void atomicWriteShort(int addr, short v) {
-        U.putShortVolatile(null, atomicAt(addr, 2), BE ? Short.reverseBytes(v) : v);
+        block.putShortVolatile(atomicAt(addr, 2), BE ? Short.reverseBytes(v) : v);
     }
-    @Override public void atomicWriteByte(int addr, byte v) { U.putByteVolatile(null, atomicAt(addr, 1), v); }
+    @Override public void atomicWriteByte(int addr, byte v) { block.putByteVolatile(atomicAt(addr, 1), v); }
 
     /** Read-modify-write of an int: returns the old value. */
     private int rmw(int addr, IntBinaryOperator op, int arg) {
         long p = atomicAt(addr, 4);
         for (;;) {
-            int raw = U.getIntVolatile(null, p);
+            int raw = block.getIntVolatile(p);
             int old = BE ? Integer.reverseBytes(raw) : raw;
             int nv = op.applyAsInt(old, arg);
-            if (U.compareAndSwapInt(null, p, raw, BE ? Integer.reverseBytes(nv) : nv)) return old;
+            if (block.casInt(p, raw, BE ? Integer.reverseBytes(nv) : nv)) return old;
         }
     }
 
     private long rmw(int addr, LongBinaryOperator op, long arg) {
         long p = atomicAt(addr, 8);
         for (;;) {
-            long raw = U.getLongVolatile(null, p);
+            long raw = block.getLongVolatile(p);
             long old = BE ? Long.reverseBytes(raw) : raw;
             long nv = op.applyAsLong(old, arg);
-            if (U.compareAndSwapLong(null, p, raw, BE ? Long.reverseBytes(nv) : nv)) return old;
+            if (block.casLong(p, raw, BE ? Long.reverseBytes(nv) : nv)) return old;
         }
     }
 
@@ -301,16 +284,16 @@ final class FlatMemory implements Memory {
      */
     private int rmwSub(int addr, int size, IntBinaryOperator op, int arg) {
         atomicAt(addr, size);
-        long p = base + (addr & ~3);
+        long p = addr & ~3;
         int bits = size * 8, mask = (1 << bits) - 1;
         int shift = BE ? (4 - size - (addr & 3)) * 8 : (addr & 3) * 8;
         for (;;) {
-            int raw = U.getIntVolatile(null, p);
+            int raw = block.getIntVolatile(p);
             int field = (raw >>> shift) & mask;
             int old = BE && size == 2 ? Short.reverseBytes((short) field) & 0xFFFF : field;
             int nv = op.applyAsInt(old, arg) & mask;
             int nf = BE && size == 2 ? Short.reverseBytes((short) nv) & 0xFFFF : nv;
-            if (U.compareAndSwapInt(null, p, raw, (raw & ~(mask << shift)) | (nf << shift))) return old;
+            if (block.casInt(p, raw, (raw & ~(mask << shift)) | (nf << shift))) return old;
         }
     }
 
@@ -320,10 +303,10 @@ final class FlatMemory implements Memory {
         LOR = (a, b) -> a | b, LXOR = (a, b) -> a ^ b, LXCHG = (a, b) -> b;
 
     @Override public int atomicAddInt(int addr, int d) {
-        return BE ? rmw(addr, ADD, d) : U.getAndAddInt(null, atomicAt(addr, 4), d);
+        return BE ? rmw(addr, ADD, d) : block.getAndAddInt(atomicAt(addr, 4), d);
     }
     @Override public int atomicXchgInt(int addr, int v) {
-        return BE ? rmw(addr, XCHG, v) : U.getAndSetInt(null, atomicAt(addr, 4), v);
+        return BE ? rmw(addr, XCHG, v) : block.getAndSetInt(atomicAt(addr, 4), v);
     }
     @Override public int atomicAndInt(int addr, int m) { return rmw(addr, AND, m); }
     @Override public int atomicOrInt(int addr, int m) { return rmw(addr, OR, m); }
@@ -333,17 +316,17 @@ final class FlatMemory implements Memory {
         int e = BE ? Integer.reverseBytes(expected) : expected;
         int r = BE ? Integer.reverseBytes(replacement) : replacement;
         for (;;) {
-            int raw = U.getIntVolatile(null, p);
+            int raw = block.getIntVolatile(p);
             if (raw != e) return BE ? Integer.reverseBytes(raw) : raw;
-            if (U.compareAndSwapInt(null, p, e, r)) return expected;
+            if (block.casInt(p, e, r)) return expected;
         }
     }
 
     @Override public long atomicAddLong(int addr, long d) {
-        return BE ? rmw(addr, LADD, d) : U.getAndAddLong(null, atomicAt(addr, 8), d);
+        return BE ? rmw(addr, LADD, d) : block.getAndAddLong(atomicAt(addr, 8), d);
     }
     @Override public long atomicXchgLong(int addr, long v) {
-        return BE ? rmw(addr, LXCHG, v) : U.getAndSetLong(null, atomicAt(addr, 8), v);
+        return BE ? rmw(addr, LXCHG, v) : block.getAndSetLong(atomicAt(addr, 8), v);
     }
     @Override public long atomicAndLong(int addr, long m) { return rmw(addr, LAND, m); }
     @Override public long atomicOrLong(int addr, long m) { return rmw(addr, LOR, m); }
@@ -353,9 +336,9 @@ final class FlatMemory implements Memory {
         long e = BE ? Long.reverseBytes(expected) : expected;
         long r = BE ? Long.reverseBytes(replacement) : replacement;
         for (;;) {
-            long raw = U.getLongVolatile(null, p);
+            long raw = block.getLongVolatile(p);
             if (raw != e) return BE ? Long.reverseBytes(raw) : raw;
-            if (U.compareAndSwapLong(null, p, e, r)) return expected;
+            if (block.casLong(p, e, r)) return expected;
         }
     }
 
