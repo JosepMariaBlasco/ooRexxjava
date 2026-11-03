@@ -24,7 +24,7 @@ WORK=${2:-/home/claude/work}
 BRANCH=saved-build
 # what the build is made from: every tracked file it reads, by content
 # host/chicory-reports holds reproductions for Chicory, not build inputs.
-INPUTS="build.sh build-test.sh scripts/mvn22.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host client :(exclude)host/chicory-reports"
+INPUTS="build.sh build-test.sh scripts/mvn22.sh 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat host client launchers :(exclude)host/chicory-reports"
 
 manifest() {
   echo "work $WORK"
