@@ -60,3 +60,9 @@ jobs:
       - name: tests/windows
         shell: pwsh
         run: tests/windows/run.ps1 dist
+      - name: Endive's WASI and file attributes (host/chicory-reports/endive, StatAttributes)
+        shell: bash
+        run: |
+          cd host/chicory-reports/endive
+          mvn -q -B package dependency:build-classpath -Dmdep.outputFile=cp.txt
+          java -cp "target/endive-repro-1.jar;$(cat cp.txt)" repro.StatAttributes
