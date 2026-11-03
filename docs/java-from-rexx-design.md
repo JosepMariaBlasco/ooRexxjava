@@ -609,6 +609,17 @@ The first use of runs: a minimal server and client, meant for the suite first.
     relayed once warm: 200,000 `say` to a file, 3.0–3.4 s against 4.6–4.9
     through `/proc` (a write per line there; here many frames per write).
 
+  Step 3, *`rexxj` on Windows* (03/11/2026): `launchers/windows/*.cmd` (java
+  run directly, not through `call`, which would expand `%` and `^` again); each
+  drive preopened as `/letter` and the host translating paths at the borders
+  (`WinPath`: PWD, PATH, the program's name, `.RexxInfo`, `FileSys`, commands);
+  `/bin/sh -c` as `%ComSpec% /s /c "…"`; Endive's three WASI functions that read
+  `"unix:*"` replaced on Windows (`WinWasi`: every `stat` failed, so `rexx.img`
+  could not be loaded). CI: `.github/workflows/windows.yml`, a Linux job builds
+  the jar over the saved build's `rexx.wasm`, a Windows job runs
+  `tests/windows/run.ps1` on Java 21 and 25. Not yet: the warm JVM on Windows
+  (step 4), the suite on Windows.
+
   What runs still share, and will: the JVM's heap (a run that exhausts it
   affects all) and `System.exit` (Java code that calls it ends the server and
   every run: BSF4ooRexx calls Java by reflection, so the call cannot be

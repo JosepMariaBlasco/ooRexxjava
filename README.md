@@ -289,6 +289,35 @@ the client's (`docs/java-from-rexx-design.md`, "The warm JVM and its client").
 rexxjs --orx-server-stop    # ends this build's server and the programs it runs
 ```
 
+## Windows
+
+`dist/` runs on Windows as it is, with Java 11 or later: `rexx.cmd`, `rexxj.cmd`
+and the tools' `.cmd` (`launchers/windows/`, which `build.sh` copies into
+`dist/`). Build on Linux; the jar and `rexx.wasm` are the same everywhere.
+`.github/workflows/windows.yml` runs `tests/windows/run.ps1` on a Windows runner
+with Java 21 and 25, over the saved build's `rexx.wasm`.
+
+The interpreter is a Unix one (WASI), so on Windows each drive is a directory of
+its file system, as in MSYS and Git Bash: `C:\Users\x` is `/c/Users/x`
+(`host/.../WinPath.java`). The launcher translates where Windows paths come in or
+go out: the current directory, `PATH` (`;` and `:`), the program's name on the
+command line (`rexx C:\x\p.rex`, `rexx sub\p.rex`), `.RexxInfo~executable` and
+`~libraryPath`, and a command's name, directory and `PATH`. Other environment
+variables stay as Windows has them (`TEMP` is `C:\...`), and paths that a program
+builds stay in the module's form: a command given `/c/x` does not understand it.
+
+Commands: `ADDRESS SYSTEM`, `COMMAND`, `""` and `SH` run through `%ComSpec%`
+(`cmd.exe /s /c`), as natively on Windows; `ADDRESS BASH` and the other shells are
+looked up in `PATH` (Git Bash's `bash`, say); `ADDRESS PATH` looks the command up
+with `PATHEXT`. There is no `ADDRESS CMD`: the Unix interpreter does not have it.
+
+Endive's WASI reads files' attributes through a view Windows does not have
+(`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
+three functions that need it on Windows. The warm JVM (`rexxjs`) is not there yet:
+`REXXJ_SERVER` is ignored. JDK 24 and later warn about `Unsafe` on every run
+(`REXXJ_JAVA_OPTIONS=--sun-misc-unsafe-memory-access=allow`: "Speed"); on Windows
+there is no fallback without it (a mapped file there cannot be deleted while open).
+
 ## Speed
 
 `rexxcps`, 2 cores, Java 21: about 1.9–2.0 M clauses/s; natively, ooRexx
@@ -360,11 +389,12 @@ per thread").
 | `0001-wasi-on-top-of-oorexxwasm-0001.patch` | The WASI patch (three files, what is WASI's alone), applied on top of `oorexxwasm`'s `patches/0001-wasm-generic-layer.patch`, the layer common to every WebAssembly build. |
 | `compat/` | Headers and stubs for what wasi-libc lacks; `orx_wasi_host.c`, the host functions of `oorexxwasm`'s `SysWasmHost.hpp` (commands, `.RexxInfo~executable`, `~libraryPath`) over functions the launcher gives the module (import module `rexxjvm`, `host/.../Host.java`); `orx_wasi_embed.cpp`, the embedded mode's side in the module; `orx_jni.c` and `jni/jni_md.h`, the mini-JNI (import module `jni`, `host/.../Jni.java`); `orx_bsf.c`, what BSF4ooRexx's library needs to be linked in (`dlopen`, the table of linked libraries). |
 | `wasi-p1-threads.cmake` | wasi-sdk toolchain file for `wasm32-wasip1-threads`. |
+| `launchers/windows/` | `rexx.cmd`, `rexxj.cmd` and the tools' launchers for Windows ("Windows"). |
 | `client/` | `rexxjs.c`, the native client of the warm JVM ("A warm JVM: `rexxjs`"). |
 | `host/` | The Java launcher (Maven; Endive's WASI, shared memory, and `thread-spawn`; the `embedded` profile builds `rexxj.jar` with the interpreter translated at build time; `FlatMemory`, the linear memory; `chicory-patch/`, the patch to Endive's (formerly Chicory's) compiler, README "Speed"). |
-| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223. |
+| `tests/` | Small test programs (`hello.rex`, `conc.rex`, `err.rex`, `sys.rex`, `cmd.rex`, `rxapi.rex`, `t.cpp`); `embed/`, the embedded mode's tests; `jni/`, the mini-JNI's; `bsf/`, BSF4ooRexx's; `jsr223/`, a Java program hosting Rexx through JSR-223; `windows/`, the checks the Windows CI job runs. |
 | `docs/` | Reports and designs (`java-from-rexx-design.md`: Java from Rexx and Rexx from Java). |
-| `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module). |
+| `prototypes/` | Experiments that are not part of the build (`threads/`: Java threads entering the module; `memory-bench/`: the linear memory with `Unsafe` and with `java.lang.foreign`, standalone). |
 | `results/` | Runs of ooRexx's official test suite (one CSV per run, from `oorexxwasm`'s `tests/run-suite.sh`). Run it with `JAVA_TOOL_OPTIONS` unset: Java reports it on standard error ("Picked up ..."), and tests that expect no error output from `rexx` fail. |
 
 ## Trademarks and Legal Notices

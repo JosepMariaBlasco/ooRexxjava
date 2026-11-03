@@ -120,4 +120,6 @@ for t in rexxc rxqueue rxsubcom; do
   printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-%s "$@"\n' "$t" > "dist/$t"
 done
 chmod +x dist/rexx dist/rexxc dist/rxqueue dist/rxsubcom
+# the launchers for Windows (README.md, "Windows"): dist/ runs there as it is
+cp "$HERE"/launchers/windows/*.cmd dist/
 echo "done: $WORK/dist/rexxj program.rex"
