@@ -11,7 +11,7 @@ import sun.misc.Unsafe;
  * the JVM allows it (see {@link Blocks}); JDK 24 and later print a warning on its first
  * use unless started with {@code --sun-misc-unsafe-memory-access=allow}.
  */
-final class UnsafeMemory extends FlatMemory {
+class UnsafeMemory extends FlatMemory {
     private static final Unsafe U;
     private static final long BYTE_BASE;
     static {
@@ -27,8 +27,19 @@ final class UnsafeMemory extends FlatMemory {
 
     private final long base;
 
-    UnsafeMemory(MemoryLimits limits) {
-        super(limits);
+    /** The memory for these limits: a Relaxed one if they allow it (FlatMemory.relaxed). */
+    static UnsafeMemory of(MemoryLimits limits) {
+        return FlatMemory.relaxed(limits) ? new Relaxed(limits) : new UnsafeMemory(limits, false);
+    }
+
+    /** The relaxed check (FlatMemory, "Two ways to check"). */
+    static final class Relaxed extends UnsafeMemory {
+        Relaxed(MemoryLimits limits) { super(limits, true); }
+        @Override long at(int addr, int n) { return atRelaxed(addr, n); }
+    }
+
+    private UnsafeMemory(MemoryLimits limits, boolean relaxed) {
+        super(limits, relaxed);
         long bytes = reservation();
         long b = U.allocateMemory(Math.max(bytes, 8));
         this.base = b;

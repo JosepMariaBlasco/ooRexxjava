@@ -15,6 +15,6 @@ final class Blocks {
     static FlatMemory create(MemoryLimits limits) {
         if ("mapped".equals(System.getProperty("rexxjvm.memory")))
             System.err.println("rexxj: -Drexxjvm.memory=mapped needs Java 22 or later; using sun.misc.Unsafe");
-        return new UnsafeMemory(limits);
+        return UnsafeMemory.of(limits);
     }
 }

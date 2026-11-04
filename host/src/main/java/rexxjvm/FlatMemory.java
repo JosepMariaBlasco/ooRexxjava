@@ -86,7 +86,11 @@ abstract class FlatMemory implements Memory {
         return Blocks.create(limits);
     }
 
-    FlatMemory(MemoryLimits limits) {
+    /** Reserve the guard past the end (the relaxed check). */
+    private final boolean guard;
+
+    FlatMemory(MemoryLimits limits, boolean relaxed) {
+        this.guard = relaxed;
         this.limits = limits;
         this.maxPages = Math.min(limits.maximumPages(), RUNTIME_MAX_PAGES);
         this.nPages = limits.initialPages();
@@ -114,8 +118,39 @@ abstract class FlatMemory implements Memory {
 
     // ---- bounds ----------------------------------------------------------------------------
 
+    /*
+     * Two ways to check a plain access (at most 8 bytes; blocks and atomics always use
+     * atStrict). Strict: against the current size, as the specification says. Relaxed
+     * (Relaxed, a subclass of each kind of block): only that the address is below 2 GB,
+     * with a guard reserved past the end so that the bytes up to 2^31 + 7 exist. The
+     * relaxed check is a test of the sign, with no field read: the current size is a
+     * field the JIT must read again after every call, and that check was about a fifth
+     * of rexxcps' time (04/11/2026: 3.1 M clauses/s strict, 3.9 M relaxed; without any
+     * check 4.0 M). What it gives up: an access between the current size and 2 GB reads
+     * or writes the reserve instead of trapping; only a wild pointer gets there, and the
+     * memory still traps past 2 GB. Only for a module whose maximum is the runtime's
+     * (rexx.wasm's 2 GB): getAddr gives a negative address for anything past 2 GB, so the
+     * sign is enough. -Drexxjvm.memcheck=strict asks for the strict check always.
+     */
+
+    /** Whether a memory with these limits is checked the relaxed way. */
+    static boolean relaxed(MemoryLimits limits) {
+        return Math.min(limits.maximumPages(), RUNTIME_MAX_PAGES) == RUNTIME_MAX_PAGES
+            && !"strict".equals(System.getProperty("rexxjvm.memcheck"));
+    }
+
+    /** The offset of a plain access of n <= 8 bytes at addr; the relaxed subclasses override it. */
+    long at(int addr, int n) {
+        return atStrict(addr, n);
+    }
+
+    /** The relaxed check: below 2 GB (see above); the subclasses' at. */
+    final long atRelaxed(int addr, int n) {
+        return addr < 0 ? atStrict(addr, n) : addr;
+    }
+
     /** The offset of an access of n bytes at addr; traps if out of bounds. */
-    private long at(int addr, int n) {
+    final long atStrict(int addr, int n) {
         // out of bounds if addr < 0 (getAddr gives a negative address for one past 2 GB)
         // or addr + n > limit; no overflow: limit < 2^31 - 64K, n <= 2^31 - 1
         if ((addr | (limit - n - addr)) < 0) return atSlow(addr, n);
@@ -132,7 +167,7 @@ abstract class FlatMemory implements Memory {
     /** The offset of an atomic access of n bytes, which must also be aligned. */
     private long atomicAt(int addr, int n) {
         if ((addr & (n - 1)) != 0) throw new WasmRuntimeException("unaligned atomic");
-        return at(addr, n);
+        return atStrict(addr, n);
     }
 
     private static WasmRuntimeException outOfBounds(int addr, long size, int limit) {
@@ -148,7 +183,7 @@ abstract class FlatMemory implements Memory {
             if (Integer.compareUnsigned(addr, lim) > 0) throw outOfBounds(addr, 0, lim);
             return addr;
         }
-        return at(addr, size);
+        return atStrict(addr, size);
     }
 
     // ---- plain accesses --------------------------------------------------------------------
@@ -445,8 +480,12 @@ abstract class FlatMemory implements Memory {
     // the block's address a field of this same object (a separate block object cost an
     // extra dependent load per access).
 
-    /** The size to reserve, in bytes: the maximum, so that the block never moves. */
-    final long reservation() { return (long) maxPages * PAGE_SIZE; }
+    /**
+     * The size to reserve, in bytes: the maximum, so that the block never moves, and for
+     * the relaxed check a guard up to 2^31 + 64K (2 GB less 64K is the maximum, and an
+     * access of 8 bytes may start just below 2^31).
+     */
+    final long reservation() { return (long) maxPages * PAGE_SIZE + (guard ? 2 * PAGE_SIZE : 0); }
 
     abstract byte getByte(long o);
     abstract void putByte(long o, byte v);

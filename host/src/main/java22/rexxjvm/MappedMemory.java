@@ -28,7 +28,7 @@ import run.endive.wasm.types.MemoryLimits;
  * the process's own memory, never written back to the file. Mapping {@code /dev/zero}
  * would be simpler, but {@code FileChannel.map} refuses it.
  */
-final class MappedMemory extends FlatMemory {
+class MappedMemory extends FlatMemory {
     private static final ValueLayout.OfByte BYTE = ValueLayout.JAVA_BYTE;
     private static final ValueLayout.OfShort SHORT_U = ValueLayout.JAVA_SHORT_UNALIGNED;
     private static final ValueLayout.OfInt INT_U = ValueLayout.JAVA_INT_UNALIGNED;
@@ -41,8 +41,19 @@ final class MappedMemory extends FlatMemory {
 
     private final MemorySegment m;
 
-    MappedMemory(MemoryLimits limits) throws IOException {
-        super(limits);
+    /** The memory for these limits: a Relaxed one if they allow it (FlatMemory.relaxed). */
+    static MappedMemory of(MemoryLimits limits) throws IOException {
+        return FlatMemory.relaxed(limits) ? new Relaxed(limits) : new MappedMemory(limits, false);
+    }
+
+    /** The relaxed check (FlatMemory, "Two ways to check"). */
+    static final class Relaxed extends MappedMemory {
+        Relaxed(MemoryLimits limits) throws IOException { super(limits, true); }
+        @Override long at(int addr, int n) { return atRelaxed(addr, n); }
+    }
+
+    private MappedMemory(MemoryLimits limits, boolean relaxed) throws IOException {
+        super(limits, relaxed);
         Arena a = Arena.ofShared();               // the arena kind makes no difference to speed
         long size = Math.max(reservation(), 4096);
         Path p = Files.createTempFile("rexxj-memory", ".bin");

@@ -28,9 +28,9 @@ final class Blocks {
         String asked = System.getProperty("rexxjvm.memory", "");
         boolean windows = System.getProperty("os.name", "").toLowerCase(Locale.ROOT).startsWith("windows");
         if (asked.equals("mapped") && !windows) return mapped(limits);
-        if (asked.equals("unsafe") || windows) return new UnsafeMemory(limits);
+        if (asked.equals("unsafe") || windows) return UnsafeMemory.of(limits);
         try {
-            return new UnsafeMemory(limits);
+            return UnsafeMemory.of(limits);
         } catch (UnsupportedOperationException | LinkageError x) {
             // denied: allocateMemory throws (or UnsafeMemory's initialization failed)
             return mapped(limits);
@@ -39,7 +39,7 @@ final class Blocks {
 
     private static FlatMemory mapped(MemoryLimits limits) {
         try {
-            return new MappedMemory(limits);
+            return MappedMemory.of(limits);
         } catch (IOException x) {
             throw new IllegalStateException("rexxj: cannot map the module's memory: " + x, x);
         }

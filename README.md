@@ -362,9 +362,10 @@ while open).
 
 ## Speed
 
-`rexxcps`, 2 cores, Java 21: about 1.9–2.0 M clauses/s; natively, ooRexx
-r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
-0.56 M (02/11/2026):
+`rexxcps`, 2 cores, Java 21: about 2.4–2.6 M clauses/s as it is (4 s, with the
+JVM's warm-up in it), 3.7–3.9 M over 26 s (`averaging=800`; Java 25: about 10%
+more); natively, ooRexx r13346 runs it at 9.7–10.7 M on the same machine.
+Three things got it there from 0.56 M (02–04/11/2026):
 
 - **The compiler, patched** (`host/chicory-patch/`, written for Chicory 1.7.5;
   Endive 1.2.0's compiler has the same two constants). The runtime translates
@@ -386,6 +387,28 @@ r13346 runs it at 9.7–10.7 M on the same machine. Two things got it there from
   by itself, about a third slower (`-Drexxjvm.memory=mapped` asks for it;
   `docs/java-from-rexx-design.md`). Build with Maven on JDK 22 or later for
   that: `scripts/mvn22.sh`, which `build.sh` uses, finds one if there is.
+- **The relaxed bounds check** (04/11/2026): for a module whose memory may
+  reach the runtime's 2 GB (`rexx.wasm`), a plain access checks only that its
+  address is below 2 GB, a test of the sign, with a guard reserved past the end
+  of the block; the check against the current size, a field the JIT must read
+  again after every call, was about a fifth of the time (26 s run: 3.1 to 3.9 M;
+  no check at all, 4.0 M). An access between the current size and 2 GB, which
+  only a wild pointer makes, reads or writes the reserve instead of trapping;
+  blocks and atomics are checked as before. `-Drexxjvm.memcheck=strict` checks
+  every access against the current size, as the specification says (`FlatMemory`,
+  `tests/memory/`). ooRexx's suite with it: 405/405 (r13358, test/trunk r13359,
+  through the warm JVM, `results/suite-jvm-r13358-bsf1131-server-relaxed.csv`).
+
+Profile of the 26 s run after these (async-profiler, 04/11/2026): 49% of the
+time in memory accesses before the relaxed check, much of it the interpreter's
+own loads; 18% in `call_indirect`'s dispatch (the table looked up on every C++
+virtual call); 6% in `Thread.isInterrupted`, checked on every call; 4% in
+globals (the C stack pointer, through Endive's `Instance.global`). JDK 21's JFR
+walks the module's stacks badly (a few hundred samples in 27 s); JDK 25's
+samples at safepoints, which charges `call_indirect` with twice its share.
+Binaryen's `wasm-opt -O3` (the C++ is already `-O3`): 3.4 times slower, as its
+inlining takes `RexxActivation::run` over HotSpot's limit; without inlining,
+about 10% faster, not worth Node and Binaryen in the build.
 
 `-XX:-DontCompileHugeMethods`, which lifts HotSpot's limit for every method,
 no longer helps (1.75 M) and makes start-up slower; `REXXJ_JAVA_OPTIONS`
