@@ -41,8 +41,8 @@ $out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
 Check "program by absolute Windows path" "[abs]" ($out -join "|")
 # through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
 # windows.yml as test-ctrlbreak.exe; Java takes Ctrl+Break for a thread dump)
-$cb = Join-Path (Resolve-Path $Dist) "test-ctrlbreak.exe"
-$rjs = Join-Path (Resolve-Path $Dist) "rexxjs.exe"
+$cb = Join-Path (Split-Path $rexx) "test-ctrlbreak.exe"
+$rjs = Join-Path (Split-Path $rexx) "rexxjs.exe"
 if ($env:REXXJ_SERVER -and (Test-Path $cb) -and (Test-Path $rjs)) {
     $out = & $cb 4000 $rjs halt.rex 2>$null
     Check "Ctrl+Break, a HALT" "halted" ($out -join "|")

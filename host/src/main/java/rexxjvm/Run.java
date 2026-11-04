@@ -536,6 +536,15 @@ final class Run {
         }
     }
 
+    /**
+     * Frees the run's linear memory now, not when it is collected (FlatMemory.release):
+     * only once it has ended and none of its threads, nor any Java thread that could call
+     * into it, is left (Server.serve).
+     */
+    void releaseMemory() {
+        if (memory instanceof FlatMemory) ((FlatMemory) memory).release();
+    }
+
     /** Waits up to the timeout for the run's threads to end; returns how many are left. */
     int awaitThreads(long timeout, TimeUnit unit) {
         long deadline = System.nanoTime() + unit.toNanos(timeout);

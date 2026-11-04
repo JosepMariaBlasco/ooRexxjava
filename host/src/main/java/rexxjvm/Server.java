@@ -280,8 +280,11 @@ public final class Server {
 
             int rc = run.start();
             Thread.interrupted();                     // end() may have interrupted this thread
-            run.awaitThreads(5, TimeUnit.SECONDS);
-            endJavaThreads(loader, 2, TimeUnit.SECONDS);
+            int left = run.awaitThreads(5, TimeUnit.SECONDS);
+            left += endJavaThreads(loader, 2, TimeUnit.SECONDS);
+            // nothing can touch the run's memory any more: free it now, not when collected
+            // (on Windows the whole reservation is committed; FlatMemory.release)
+            if (left == 0) run.releaseMemory();
             if (relay != null) {
                 relay.exit(rc);
                 return;
@@ -311,8 +314,9 @@ public final class Server {
      * the end of a process ends all its threads, and waits up to the timeout for them.
      * BSF4ooRexx's {@code RexxCleanupRef} cleaner, one per run, waits on a reference queue
      * for ever otherwise, and keeps the run's class loader, with all its classes, alive.
+     * Returns how many are still alive.
      */
-    static void endJavaThreads(ClassLoader loader, long timeout, TimeUnit unit) {
+    static int endJavaThreads(ClassLoader loader, long timeout, TimeUnit unit) {
         Thread self = Thread.currentThread();
         List<Thread> left = new ArrayList<>();
         for (Thread t : Thread.getAllStackTraces().keySet()) {
@@ -327,6 +331,9 @@ public final class Server {
             if (ms <= 0) break;
             try { t.join(ms); } catch (InterruptedException x) { Thread.currentThread().interrupt(); break; }
         }
+        int alive = 0;
+        for (Thread t : left) if (t.isAlive()) alive++;
+        return alive;
     }
 
     /**

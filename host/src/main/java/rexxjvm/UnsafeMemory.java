@@ -32,7 +32,7 @@ final class UnsafeMemory extends FlatMemory {
         long bytes = reservation();
         long b = U.allocateMemory(Math.max(bytes, 8));
         this.base = b;
-        CLEANER.register(this, () -> U.freeMemory(b));
+        freeWith(() -> U.freeMemory(b));
         // A block this large comes from mmap, zero-filled. Check a few spots anyway: if
         // an allocator handed back used memory, clear it all (correct, but no longer lazy).
         if (bytes > 0 && (U.getLong(b) != 0 || U.getLong(b + bytes / 2) != 0 || U.getLong(b + bytes - 8) != 0))

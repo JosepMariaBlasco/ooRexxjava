@@ -43,6 +43,25 @@ import java.util.function.LongBinaryOperator;
 abstract class FlatMemory implements Memory {
     private static final boolean BE = ByteOrder.nativeOrder() == ByteOrder.BIG_ENDIAN;
     static final Cleaner CLEANER = Cleaner.create();
+    /** What frees the block: when the memory is collected, or at once by {@link #release}. */
+    private volatile Cleaner.Cleanable freeing;
+
+    /** The subclass's way to free its block (it must not refer to this memory). */
+    final void freeWith(Runnable free) {
+        freeing = CLEANER.register(this, free);
+    }
+
+    /**
+     * Frees the block now instead of when the memory is collected (once; later calls do
+     * nothing). Only when nothing can touch the memory again: an access after it reads
+     * or writes freed memory. A server's run whose threads have all ended (Server.serve):
+     * on Windows the whole reservation is committed, so a block left to the collector
+     * holds its 2 GB of the machine's commit limit until then.
+     */
+    final void release() {
+        Cleaner.Cleanable c = freeing;
+        if (c != null) c.clean();
+    }
 
     private final MemoryLimits limits;
     private final int maxPages;

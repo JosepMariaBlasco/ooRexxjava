@@ -56,7 +56,7 @@ final class MappedMemory extends FlatMemory {
         } finally {
             Files.deleteIfExists(p);
         }
-        CLEANER.register(this, a::close);
+        freeWith(a::close);
     }
 
 
