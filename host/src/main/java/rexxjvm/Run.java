@@ -346,17 +346,23 @@ final class Run {
 
     /**
      * Windows: the program's name on rexx's command line in the module's form (WinPath),
-     * the first argument that is not an option (none after -e, whose program is text);
-     * for rexxc, its file names. Other arguments go to the program as they are.
+     * the first argument that is not an option or an option's value (-o and -od take
+     * one: rexx.cpp; none after -e, whose program is text); for rexxc, its file names;
+     * for the test suite's rexxinstance, its program, after the call type and the
+     * options (each with a value: testbinaries/rexxinstance.cpp). Other arguments go to
+     * the program as they are.
      */
     static List<String> guestArgs(List<String> argv) {
         List<String> l = new ArrayList<>(argv);
-        boolean rexxc = l.size() > 1 && l.get(1).equals("--orx-wasm-rexxc");
-        if (l.size() > 1 && l.get(1).startsWith("--orx-wasm-") && !rexxc) return l;
-        for (int i = rexxc ? 2 : 1; i < l.size(); i++) {
+        String tool = l.size() > 1 && l.get(1).startsWith("--orx-wasm-") ? l.get(1).substring(11) : null;
+        if (tool != null && !tool.equals("rexxc") && !tool.equals("rexxinstance")) return l;
+        boolean rexxc = "rexxc".equals(tool);
+        boolean instance = "rexxinstance".equals(tool);
+        for (int i = tool == null ? 1 : instance ? 3 : 2; i < l.size(); i++) {
             String a = l.get(i);
             if (a.startsWith("-")) {
-                if (!rexxc && a.equals("-e")) break;
+                if (tool == null && a.equals("-e")) break;
+                if (instance || (tool == null && (a.equalsIgnoreCase("-o") || a.equalsIgnoreCase("-od")))) i++;
                 continue;
             }
             l.set(i, WinPath.toGuest(a));
