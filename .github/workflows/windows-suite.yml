@@ -57,6 +57,7 @@ jobs:
           (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$D/rexx.wasm")
           cp host/target/rexxj.jar "$D/"
           cp launchers/windows/*.cmd "$D/"
+          scripts/test-tool-launchers.sh "$D"
       - name: The suite (test/trunk r${{ inputs.test_rev }}) and oorexxwasm's tools
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq subversion

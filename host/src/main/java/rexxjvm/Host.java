@@ -275,8 +275,10 @@ final class Host {
      * cmd.exe (%ComSpec%), as natively on Windows (and /bin/cmd, should the interpreter
      * ever have an ADDRESS CMD: the Unix one has none, it is Error 3); any other shell
      * (bash, pwsh, powershell) is looked up in PATH and given "-c" as it is. ADDRESS
-     * PATH's command name is looked up in PATH with PATHEXT. The command's PATH and
-     * name go back to the host's form; its other arguments are as the program gave them.
+     * PATH's command name is looked up in PATH with PATHEXT. The command's PATH, HOME,
+     * TMPDIR and name go back to the host's form, and so do the drives' paths in a
+     * shell's command line (WinPath.commandToHost) and ADDRESS PATH's arguments that
+     * are one (WinPath.argToHost).
      */
     static boolean windows(List<String> argv, Map<String, String> env, String cwd) {
         String path = null;
@@ -286,6 +288,11 @@ final class Host {
         if (path != null) {
             path = WinPath.listToHost(path);
             env.put("PATH", path);
+        }
+        // HOME and TMPDIR: the module has them in its form (Run), the command in the host's
+        for (String k : new String[] { "HOME", "TMPDIR" }) {
+            String v = env.get(k);
+            if (v != null) env.put(k, WinPath.toHost(v));
         }
         String a0 = argv.get(0);
         if (a0.startsWith("/bin/") && argv.size() == 3 && argv.get(1).equals("-c")) {
@@ -298,7 +305,7 @@ final class Host {
                 if (comspec == null) comspec = "cmd.exe";
                 // /s /c "command": cmd.exe takes away the first and the last quote, and
                 // runs the rest as typed; Java passes a quoted argument as it is
-                String command = argv.get(2);
+                String command = WinPath.commandToHost(argv.get(2));
                 argv.clear();
                 argv.addAll(List.of(comspec, "/s", "/c", "\"" + command + "\""));
                 return true;
@@ -317,6 +324,7 @@ final class Host {
             a0 = new File(cwd, a0).getPath();
         }
         argv.set(0, a0);
+        for (int i = 1; i < argv.size(); i++) argv.set(i, WinPath.argToHost(argv.get(i)));
         return true;
     }
 

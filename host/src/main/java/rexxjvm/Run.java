@@ -274,12 +274,34 @@ final class Run {
             home = home.endsWith("/") && home.length() > 1 ? home.substring(0, home.length() - 1) : home;
             path = path == null || path.isEmpty() ? home : home + ":" + path;
         }
+        // On Windows, HOME and TMPDIR too, in the module's form: the interpreter takes "~"
+        // from HOME and its temporary files' directory from TMPDIR (else /tmp, which
+        // Windows does not have); when they are not set, from USERPROFILE and TEMP (TMP)
+        String winHome = null, winTmp = null;
+        if (WinPath.WINDOWS) {
+            String profile = null, temp = null, tmp = null;
+            for (Map.Entry<String, String> e : env.entrySet()) {
+                String k = e.getKey();
+                if (k.equalsIgnoreCase("HOME")) winHome = e.getValue();
+                else if (k.equalsIgnoreCase("TMPDIR")) winTmp = e.getValue();
+                else if (k.equalsIgnoreCase("USERPROFILE")) profile = e.getValue();
+                else if (k.equalsIgnoreCase("TEMP")) temp = e.getValue();
+                else if (k.equalsIgnoreCase("TMP")) tmp = e.getValue();
+            }
+            if (winHome == null || winHome.isEmpty()) winHome = profile;
+            if (winTmp == null || winTmp.isEmpty()) winTmp = temp != null ? temp : tmp;
+            winHome = WinPath.toGuest(winHome);
+            winTmp = WinPath.toGuest(winTmp);
+        }
         for (Map.Entry<String, String> e : env.entrySet()) {
             String k = e.getKey();
-            boolean special = WinPath.WINDOWS ? k.equalsIgnoreCase("PWD") || k.equalsIgnoreCase("PATH")
-                                              : k.equals("PWD") || k.equals("PATH");
+            boolean special = WinPath.WINDOWS
+                ? k.equalsIgnoreCase("PWD") || k.equalsIgnoreCase("PATH") || k.equalsIgnoreCase("HOME") || k.equalsIgnoreCase("TMPDIR")
+                : k.equals("PWD") || k.equals("PATH");
             if (!special) ob.withEnvironment(k, e.getValue());
         }
+        if (winHome != null) ob.withEnvironment("HOME", winHome);
+        if (winTmp != null) ob.withEnvironment("TMPDIR", winTmp);
         if (path != null) ob.withEnvironment("PATH", path);
         ob.withEnvironment("PWD", WinPath.toGuest(o.cwd != null ? o.cwd : System.getProperty("user.dir")));
         // the C stack of the threads the interpreter creates (compat/orx_wasi_host.c,

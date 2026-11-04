@@ -180,6 +180,7 @@ printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-rexx
 chmod +x "$WORK/dist-test/rexxinstance"
 printf '#!/bin/sh\nexec "$(dirname "$(readlink -f "$0")")/rexxj" --orx-wasm-detach_root_terminate "$@"\n' > "$WORK/dist-test/detach_root_terminate"
 chmod +x "$WORK/dist-test/detach_root_terminate"
+"$HERE/scripts/test-tool-launchers.sh" "$WORK/dist-test"   # their .cmd for Windows
 # the mini-JNI's test, with the Java class it calls
 mkdir -p "$WORK/dist-test/jnitest-classes"
 javac -d "$WORK/dist-test/jnitest-classes" "$HERE/tests/jni/jnitest/JniTarget.java"
