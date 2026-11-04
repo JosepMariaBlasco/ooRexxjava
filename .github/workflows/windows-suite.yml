@@ -6,8 +6,8 @@
 # the jar again, the C side not; it fails if the C inputs changed: rebuild and
 # publish the saved build first), exports test/trunk and takes oorexxwasm's
 # tests/run-suite.sh (one process per group, CSV) and suite-check.py. The Windows
-# job runs the suite from Git Bash, one JVM per group (no warm JVM on Windows yet),
-# and compares the run with ours on Linux (405/405) and with oorexxwasm's on
+# job runs the suite from Git Bash through the warm JVM (rexxjs.exe, REXXJ_SERVER;
+# input server=false: one JVM per group, through java directly), and compares the run with ours on Linux (405/405) and with oorexxwasm's on
 # Windows (the same interpreter under Node, 393/405: what a Unix-flavoured
 # interpreter meets on a Windows host); both comparisons go to the run's summary
 # and never fail the job. The CSV and the logs are an artifact.
@@ -30,6 +30,9 @@ on:
       test_rev:
         description: test/trunk revision
         default: '13359'
+      server:
+        description: Through the warm JVM (rexxjs.exe), as on Linux
+        default: 'true'
 jobs:
   prepare:
     runs-on: ubuntu-latest
@@ -61,6 +64,10 @@ jobs:
           cp host/target/rexxj.jar "$D/"
           cp launchers/windows/*.cmd "$D/"
           scripts/test-tool-launchers.sh "$D"
+      - name: rexxjs.exe, the warm JVM's client (client/rexxjs_win.c), with MinGW-w64
+        run: |
+          sudo apt-get install -y -qq gcc-mingw-w64-x86-64 >/dev/null
+          x86_64-w64-mingw32-gcc -O2 -Wall -municode -o "$RUNNER_TEMP/in/dist-test/rexxjs.exe" client/rexxjs_win.c -lws2_32 -static
       - name: The suite (test/trunk r${{ inputs.test_rev }}) and oorexxwasm's tools
         run: |
           sudo apt-get update -qq && sudo apt-get install -y -qq subversion
@@ -103,14 +110,20 @@ jobs:
           D=$(cygpath -w "$W/dist-test")
           # commands that tests run (rexx, rxqueue...) are dist-test's .cmd launchers
           echo "$D" >> "$GITHUB_PATH"
-          # the suite's own rexx: java directly (as rexxj.cmd runs it), so that cmd.exe
-          # does not expand the arguments a second time
-          V=$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
-          U=; [ "${V%%.*}" -ge 23 ] && U=--sun-misc-unsafe-memory-access=allow
-          {
-            echo '#!/bin/bash'
-            echo "exec java -Xss16m $U \"-Drexxjvm.executable=$D\\rexx.cmd\" \"-Drexxjvm.home=$D\" \"-javaagent:$D\\rexxj.jar\" -cp \"$D\\rexxj.jar;$D\\bsf4oorexx.jar\" rexxjvm.RunWasm \"\$@\""
-          } > "$W/dist-test/rexx-bash"
+          # the suite's own rexx: rexxjs.exe directly, or java directly (as rexxj.cmd runs
+          # them), so that cmd.exe does not expand the arguments a second time; with the
+          # server, the commands' launchers (.cmd) go through it too (REXXJ_SERVER)
+          if [ "${{ inputs.server }}" = true ]; then
+            echo "REXXJ_SERVER=1" >> "$GITHUB_ENV"
+            { echo '#!/bin/bash'; echo "exec \"$W/dist-test/rexxjs.exe\" \"\$@\""; } > "$W/dist-test/rexx-bash"
+          else
+            V=$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
+            U=; [ "${V%%.*}" -ge 23 ] && U=--sun-misc-unsafe-memory-access=allow
+            {
+              echo '#!/bin/bash'
+              echo "exec java -Xss16m $U \"-Drexxjvm.executable=$D\\rexx.cmd\" \"-Drexxjvm.home=$D\" \"-javaagent:$D\\rexxj.jar\" -cp \"$D\\rexxj.jar;$D\\bsf4oorexx.jar\" rexxjvm.RunWasm \"\$@\""
+            } > "$W/dist-test/rexx-bash"
+          fi
           chmod +x "$W/dist-test/rexx-bash"; cat "$W/dist-test/rexx-bash"
           "$W/dist-test/rexx-bash" -e 'parse version v; say v; say .RexxInfo~platform .RexxInfo~executable directory()'
       - name: Run the suite
@@ -118,12 +131,19 @@ jobs:
           W=$(cd .. && pwd)
           SUITE="$W/oorexx-test" "$W/tools/tests/run-suite.sh" "$W/dist-test/rexx-bash" "$RUNNER_TEMP/suite-windows" \
             "${{ inputs.jobs }}" "${{ inputs.timeout }}" "${{ inputs.pattern }}"
+          if [ "${{ inputs.server }}" = true ]; then
+            # a server must have run the suite: else rexxjs.exe fell back to rexxj.cmd
+            "$W/dist-test/rexxjs.exe" --orx-server-stop || echo "::warning::no server was running"
+            for l in "$(cygpath -u "$TEMP")"/.ooRexx-jvm-*.log; do
+              [ -f "$l" ] && { echo "---- $l"; tail -40 "$l"; cp "$l" "$RUNNER_TEMP/suite-windows/" 2>/dev/null; }
+            done
+          fi
       - name: Compare (ours on Linux; oorexxwasm's on Windows)
         if: always()
         continue-on-error: true
         run: |
           W=$(cd .. && pwd); OUT=$RUNNER_TEMP/suite-windows
-          { echo "## ooRexx on the JVM, Windows, Java ${{ inputs.java }}, test/trunk r${{ inputs.test_rev }}"; echo
+          { echo "## ooRexx on the JVM, Windows, Java ${{ inputs.java }}, test/trunk r${{ inputs.test_rev }}, server ${{ inputs.server }}"; echo
             awk -F, 'NR>1{n++; s[$2]++; ran+=$3; f+=$5; e+=$6} END{printf "groups %d:", n; for(k in s) printf " %s=%d", k, s[k]; printf " | tests %d failures %d errors %d\n", ran, f, e}' "$OUT/results.csv"
             echo; } >> "$GITHUB_STEP_SUMMARY"
           for base in results/suite-jvm-r13358-bsf1131-server.csv "$W/tools/results/suite-windows-r${{ inputs.test_rev }}-series.csv"; do
