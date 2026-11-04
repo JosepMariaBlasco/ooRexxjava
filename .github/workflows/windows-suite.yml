@@ -21,6 +21,9 @@ on:
       jobs:
         description: Groups run at the same time
         default: '2'
+      timeout:
+        description: Seconds a group may take
+        default: '300'
       java:
         description: Java version
         default: '25'
@@ -114,7 +117,7 @@ jobs:
         run: |
           W=$(cd .. && pwd)
           SUITE="$W/oorexx-test" "$W/tools/tests/run-suite.sh" "$W/dist-test/rexx-bash" "$RUNNER_TEMP/suite-windows" \
-            "${{ inputs.jobs }}" 300 "${{ inputs.pattern }}"
+            "${{ inputs.jobs }}" "${{ inputs.timeout }}" "${{ inputs.pattern }}"
       - name: Compare (ours on Linux; oorexxwasm's on Windows)
         if: always()
         continue-on-error: true
