@@ -50,6 +50,7 @@ if ($env:REXXJ_SERVER -and (Test-Path $cb) -and (Test-Path $rjs)) {
 }
 Info "what it sees" info.rex
 Info "commands" cmd.rex
+Info "a nested rexx" nested.rex
 Info "BSF4ooRexx" ..\bsf\basics.rex
 if ($fails) {
     # what the module asked of WASI (Endive's log), for the first failures

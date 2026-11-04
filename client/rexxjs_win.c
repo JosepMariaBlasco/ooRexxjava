@@ -139,7 +139,16 @@ static const wchar_t *arguments_tail(void) {
     return c;
 }
 
-static void fallback(void) {
+/* REXXJS_DEBUG set: why rexxjs.exe falls back, or cannot start a command, to stderr */
+static int debug(void) {
+    static int d = -1;
+    if (d < 0) { const wchar_t *v = _wgetenv(L"REXXJS_DEBUG"); d = v && *v; }
+    return d;
+}
+
+#define fallback() fallback_at(__LINE__)
+static void fallback_at(int line) {
+    if (debug()) fprintf(stderr, "rexxjs: falling back to rexxj.cmd (rexxjs_win.c:%d, error %lu)\n", line, (unsigned long)GetLastError());
     wbuf cl = { 0 };
     wputs(&cl, L"\"");
     wputs(&cl, wdir);
@@ -554,6 +563,12 @@ static int start_command(void) {
             DeleteProcThreadAttributeList(attrs);
         }
         free(attrs);
+    }
+    DWORD error = GetLastError();
+    if (!started && debug()) {
+        char *u = utf8(cl.p);
+        fprintf(stderr, "rexxjs: cannot start [%s] (%s, error %lu)\n", u, ok ? "CreateProcess" : "handles", (unsigned long)error);
+        free(u);
     }
     if (cin) CloseHandle(cin);
     if (cout) CloseHandle(cout);

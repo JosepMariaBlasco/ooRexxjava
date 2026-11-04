@@ -70,6 +70,7 @@ jobs:
         run: |
           $d = (Resolve-Path dist).Path      # run.ps1 changes the directory
           $env:REXXJ_SERVER = "1"
+          $env:REXXJS_DEBUG = "1"
           tests/windows/run.ps1 dist
           $rc = $LASTEXITCODE
           # start-up: a warm run against a new JVM's
