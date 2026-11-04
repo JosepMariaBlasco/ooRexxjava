@@ -67,16 +67,17 @@ jobs:
       - name: tests/windows through rexxjs.exe (REXXJ_SERVER, the warm JVM)
         shell: pwsh
         run: |
+          $d = (Resolve-Path dist).Path      # run.ps1 changes the directory
           $env:REXXJ_SERVER = "1"
           tests/windows/run.ps1 dist
           $rc = $LASTEXITCODE
           # start-up: a warm run against a new JVM's
-          $warm = (Measure-Command { & dist/rexx.cmd -e "say 'hi'" | Out-Null }).TotalMilliseconds
+          $warm = (Measure-Command { & "$d\rexx.cmd" -e "say 'hi'" | Out-Null }).TotalMilliseconds
           $env:REXXJ_SERVER = $null
-          $cold = (Measure-Command { & dist/rexx.cmd -e "say 'hi'" | Out-Null }).TotalMilliseconds
+          $cold = (Measure-Command { & "$d\rexx.cmd" -e "say 'hi'" | Out-Null }).TotalMilliseconds
           "say 'hi': {0:N0} ms through rexxjs, {1:N0} ms with a new JVM" -f $warm, $cold
           # a server must have been running: else rexxjs fell back to rexxj.cmd
-          & dist/rexxjs.exe --orx-server-stop
+          & "$d\rexxjs.exe" --orx-server-stop
           if ($LASTEXITCODE -ne 0) { "::error::no server was running: rexxjs fell back to rexxj.cmd"; $rc = 1 }
           Get-ChildItem $env:TEMP -Filter ".ooRexx-jvm-*.log" -Force | ForEach-Object {
             "---- $($_.Name)"; Get-Content $_.FullName -Tail 40 }

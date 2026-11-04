@@ -35,6 +35,8 @@ $out = & $rexx cmds.rex 2>$null
 Check "commands" "3|1 o|""a b""|127" ($out -join "|")
 $out = & $rexx paths.rex 2>$null
 Check "HOME, TMPDIR, drives' paths in commands" "1 1 1|1 1|0 0 3" ($out -join "|")
+$out = "line1" | & $rexx io.rex 2>$null
+Check "standard input, a command's input and error" "[line1]|1 banana|1 oops" ($out -join "|")
 $out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
 Check "program by absolute Windows path" "[abs]" ($out -join "|")
 Info "what it sees" info.rex
