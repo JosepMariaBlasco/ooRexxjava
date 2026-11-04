@@ -331,9 +331,9 @@ public final class Server {
 
     /**
      * The class loader of a run: {@code bsf4oorexx.jar} beside {@code rexxj.jar}, then
-     * the entries of the client's {@code CLASSPATH}, as {@code java -cp} takes them:
-     * relative to the client's directory, {@code dir/*} the jars in dir, an empty entry
-     * the directory itself. Its parent has {@code rexxj.jar} alone (the server's class
+     * the entries of the client's {@code CLASSPATH}, as {@code java -cp} takes them
+     * ({@code ':'}, on Windows {@code ';'}): relative to the client's directory,
+     * {@code dir/*} the jars in dir, an empty entry the directory itself. Its parent has {@code rexxj.jar} alone (the server's class
      * path), so BSF4ooRexx and the client's classes are found here, once per run.
      */
     static URLClassLoader loader(String classpath, String cwd, int pid) throws IOException {
@@ -344,7 +344,7 @@ public final class Server {
             if (bsf.isFile()) urls.add(bsf.toURI().toURL());
         }
         if (classpath != null) {
-            for (String e : classpath.split(":", -1)) {
+            for (String e : classpath.split(java.util.regex.Pattern.quote(File.pathSeparator), -1)) {
                 File f = new File(e.isEmpty() ? "." : e);
                 if (!f.isAbsolute()) f = new File(cwd, f.getPath());
                 if (f.getName().equals("*")) {

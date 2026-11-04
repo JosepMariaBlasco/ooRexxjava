@@ -35,6 +35,10 @@ jobs:
           (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$GITHUB_WORKSPACE/dist/rexx.wasm")
           cp host/target/rexxj.jar dist/
           cp launchers/windows/*.cmd dist/
+      - name: rexxjs.exe, the warm JVM's client (client/rexxjs_win.c), with MinGW-w64
+        run: |
+          sudo apt-get install -y -qq gcc-mingw-w64-x86-64 >/dev/null
+          x86_64-w64-mingw32-gcc -O2 -Wall -municode -o dist/rexxjs.exe client/rexxjs_win.c -lws2_32 -static
       - uses: actions/upload-artifact@v4
         with:
           name: dist
@@ -60,6 +64,23 @@ jobs:
       - name: tests/windows
         shell: pwsh
         run: tests/windows/run.ps1 dist
+      - name: tests/windows through rexxjs.exe (REXXJ_SERVER, the warm JVM)
+        shell: pwsh
+        run: |
+          $env:REXXJ_SERVER = "1"
+          tests/windows/run.ps1 dist
+          $rc = $LASTEXITCODE
+          # start-up: a warm run against a new JVM's
+          $warm = (Measure-Command { & dist/rexx.cmd -e "say 'hi'" | Out-Null }).TotalMilliseconds
+          $env:REXXJ_SERVER = $null
+          $cold = (Measure-Command { & dist/rexx.cmd -e "say 'hi'" | Out-Null }).TotalMilliseconds
+          "say 'hi': {0:N0} ms through rexxjs, {1:N0} ms with a new JVM" -f $warm, $cold
+          # a server must have been running: else rexxjs fell back to rexxj.cmd
+          & dist/rexxjs.exe --orx-server-stop
+          if ($LASTEXITCODE -ne 0) { "::error::no server was running: rexxjs fell back to rexxj.cmd"; $rc = 1 }
+          Get-ChildItem $env:TEMP -Filter ".ooRexx-jvm-*.log" -Force | ForEach-Object {
+            "---- $($_.Name)"; Get-Content $_.FullName -Tail 40 }
+          exit $rc
       - name: Endive's WASI and file attributes (host/chicory-reports/endive, StatAttributes)
         shell: bash
         run: |

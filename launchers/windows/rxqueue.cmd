@@ -5,6 +5,13 @@ rem %REXXJ_JAVA_OPTIONS%: more options for the JVM; %CLASSPATH%: Java code that 
 setlocal
 set "D=%~dp0"
 set "D=%D:~0,-1%"
+rem %REXXJ_SERVER%: the program in a warm JVM, through rexxjs.exe, the native client of
+rem rexxjvm.Server (client/rexxjs_win.c; README.md, "A warm JVM: rexxjs"), if it is here
+if not defined REXXJ_SERVER goto java
+if not exist "%D%\rexxjs.exe" goto java
+"%D%\rexxjs.exe" --orx-wasm-rxqueue %*
+exit /b %ERRORLEVEL%
+:java
 set "CP=%D%\rexxj.jar;%D%\bsf4oorexx.jar"
 if defined CLASSPATH set "CP=%CP%;%CLASSPATH%"
 rem Java 23 and later: allow sun.misc.Unsafe (FlatMemory) without JDK 24+'s warning on
