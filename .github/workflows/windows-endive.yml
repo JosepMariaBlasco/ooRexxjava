@@ -10,10 +10,10 @@ on:
     inputs:
       repo:
         description: Endive repository
-        default: JosepMariaBlasco/endive
+        default: bytecodealliance/endive
       ref:
         description: Branch or commit
-        default: wasi-windows-filestat
+        default: main
 jobs:
   jar:
     runs-on: ubuntu-latest
