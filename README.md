@@ -320,7 +320,9 @@ ooRexx's test suite (test/trunk r13359) on Windows, Java 25, one JVM per group
 (`.github/workflows/windows-suite.yml`, on demand; `dist-test/` with its tools'
 `.cmd`, run from Git Bash with `oorexxwasm`'s `tests/run-suite.sh`,
 04/11/2026, `results/suite-jvm-r13358-windows-java25-final.csv`): **394 of
-405** in about 19 minutes, 24,440 tests, 23 failures, 1 error. The interpreter
+405** in about 19 minutes, 24,440 tests, 23 failures, 1 error; through the warm JVM
+(`rexxjs.exe`, the workflow's default since 04/11/2026,
+`results/suite-jvm-r13358-windows-java25-server.csv`) the same 394 in 6 minutes. The interpreter
 under Node on Windows (`oorexxwasm`) has 393. What fails is a Unix-flavoured
 interpreter on a Windows host, by design: the suite takes WASI for a Unix and
 expects `sh` (`ADDRESS`, `OPTIONS`, `SysSearchPath`, `File~searchPath`), `id -u`
@@ -345,7 +347,9 @@ workflows build it), next to the `.cmd` launchers, which run it when
 the streams are always relayed (no `/proc`), the server's socket is in `%TEMP%`,
 Ctrl+C and Ctrl+Break are a HALT (with `rexxj.cmd`, Ctrl+Break is Java's thread
 dump), and when it cannot run the program it runs `rexxj.cmd`. `say 'hi'` takes
-60–80 ms instead of 0.5–0.9 s on the runner; `tests/windows` passes both ways.
+60–80 ms instead of 0.5–0.9 s on the runner; `tests/windows` passes both ways,
+and the suite takes 6 minutes instead of 19 (below). `REXXJS_DEBUG` set: why it
+runs `rexxj.cmd`, or cannot start a command, to standard error.
 The server frees each program's memory as it ends: on Windows `malloc` commits
 the whole 2 GB reservation, and blocks left to the garbage collector kept other
 JVMs from starting. `Unsafe`:
