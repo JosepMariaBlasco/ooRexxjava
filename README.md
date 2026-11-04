@@ -362,10 +362,10 @@ while open).
 
 ## Speed
 
-`rexxcps`, 2 cores, Java 21: about 2.4–2.6 M clauses/s as it is (4 s, with the
-JVM's warm-up in it), 3.7–3.9 M over 26 s (`averaging=800`; Java 25: about 10%
+`rexxcps`, 2 cores, Java 21: about 2.6 M clauses/s as it is (4 s, with the
+JVM's warm-up in it), 4.1–4.2 M over 26 s (`averaging=800`; Java 25: about 10%
 more); natively, ooRexx r13346 runs it at 9.7–10.7 M on the same machine.
-Three things got it there from 0.56 M (02–04/11/2026):
+Four things got it there from 0.56 M (02–04/11/2026):
 
 - **The compiler, patched** (`host/chicory-patch/`, written for Chicory 1.7.5;
   Endive 1.2.0's compiler has the same two constants). The runtime translates
@@ -398,9 +398,18 @@ Three things got it there from 0.56 M (02–04/11/2026):
   every access against the current size, as the specification says (`FlatMemory`,
   `tests/memory/`). ooRexx's suite with it: 405/405 (r13358, test/trunk r13359,
   through the warm JVM, `results/suite-jvm-r13358-bsf1131-server-relaxed.csv`).
+- **`call_indirect` resolved at build time** (04/11/2026, `host/static-table/`):
+  `rexx.wasm`'s table never changes, so the function behind each table index is
+  known when the module is translated; a step after Endive's compiler switches
+  on the index straight to the function, instead of looking the table up on
+  every C++ virtual call (half of the dispatch's 18%). Anything else (an empty
+  entry, a wrong signature, another table) goes to Endive's own code, unchanged
+  (`tests/static-table/`). 26 s run: 3.80 to 4.17 M (+10%, medians of five);
+  the 4 s run hardly changes (more to compile while warming up). The suite:
+  405/405 (`results/suite-jvm-r13358-bsf1131-server-static-table.csv`).
 
-Profile of the 26 s run after these (async-profiler, 04/11/2026): 49% of the
-time in memory accesses before the relaxed check, much of it the interpreter's
+Profile of the 26 s run before the last two (async-profiler, 04/11/2026): 49% of the
+time in memory accesses, much of it the interpreter's
 own loads; 18% in `call_indirect`'s dispatch (the table looked up on every C++
 virtual call); 6% in `Thread.isInterrupted`, checked on every call; 4% in
 globals (the C stack pointer, through Endive's `Instance.global`). JDK 21's JFR

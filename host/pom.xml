@@ -7,6 +7,8 @@
     <!-- Endive's compiler with its call_indirect dispatch in smaller methods, installed in the
          local Maven repository by scripts/endive-compiler.sh (host/chicory-patch/README.md) -->
     <endive.compiler.version>1.2.0-orx1</endive.compiler.version>
+    <!-- true: leave Endive's call_indirect dispatch as it is (static-table/README.md) -->
+    <static.table.skip>false</static.table.skip>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
   </properties>
   <dependencies>
@@ -57,6 +59,22 @@
                 <name>rexxjvm.RexxModule</name>
                 <wasmFile>${wasm.file}</wasmFile>
                 <interpreterFallback>WARN</interpreterFallback>
+              </configuration>
+            </execution></executions></plugin>
+          <!-- the call_indirect dispatch resolved at build time when the module's table never
+               changes (static-table/README.md): rewrites the classes above in target/classes -->
+          <plugin><groupId>org.codehaus.mojo</groupId><artifactId>exec-maven-plugin</artifactId><version>3.5.0</version>
+            <executions><execution><id>static-table</id><phase>process-classes</phase><goals><goal>exec</goal></goals>
+              <configuration>
+                <skip>${static.table.skip}</skip>
+                <executable>${java.home}/bin/java</executable>
+                <arguments>
+                  <argument>-cp</argument><classpath/>
+                  <argument>${project.basedir}/static-table/StaticTable.java</argument>
+                  <argument>${project.build.outputDirectory}</argument>
+                  <argument>${wasm.file}</argument>
+                  <argument>rexxjvm/RexxModuleMachine</argument>
+                </arguments>
               </configuration>
             </execution></executions></plugin>
         </plugins>

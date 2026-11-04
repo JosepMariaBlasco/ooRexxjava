@@ -1,0 +1,29 @@
+call_ii(-1, 10) ! run.endive.wasm.WasmEngineException: undefined element
+call_v(-1) ! run.endive.wasm.WasmEngineException: undefined element
+call_lj(-1, 40, 2.9) ! run.endive.wasm.WasmEngineException: undefined element
+call_ii(0, 10) ! run.endive.wasm.WasmEngineException: uninitialized element 0
+call_v(0) ! run.endive.wasm.WasmEngineException: uninitialized element 0
+call_lj(0, 40, 2.9) ! run.endive.wasm.WasmEngineException: uninitialized element 0
+call_ii(1, 10) = 11
+call_v(1) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_lj(1, 40, 2.9) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_ii(2, 10) = 20
+call_v(2) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_lj(2, 40, 2.9) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_ii(3, 10) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_v(3) = 7
+call_lj(3, 40, 2.9) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_ii(4, 10) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_v(4) ! run.endive.wasm.WasmEngineException: indirect call type mismatch
+call_lj(4, 40, 2.9) = 42
+call_ii(5, 10) ! run.endive.wasm.WasmEngineException: uninitialized element 5
+call_v(5) ! run.endive.wasm.WasmEngineException: uninitialized element 5
+call_lj(5, 40, 2.9) ! run.endive.wasm.WasmEngineException: uninitialized element 5
+call_ii(6, 10) ! run.endive.wasm.WasmEngineException: undefined element
+call_v(6) ! run.endive.wasm.WasmEngineException: undefined element
+call_lj(6, 40, 2.9) ! run.endive.wasm.WasmEngineException: undefined element
+call_ii(7, 10) ! run.endive.wasm.WasmEngineException: undefined element
+call_v(7) ! run.endive.wasm.WasmEngineException: undefined element
+call_lj(7, 40, 2.9) ! run.endive.wasm.WasmEngineException: undefined element
+call_ii(0x7fffffff, 1) ! run.endive.wasm.WasmEngineException: undefined element
+call_ii(-2147483648, 1) ! run.endive.wasm.WasmEngineException: undefined element
