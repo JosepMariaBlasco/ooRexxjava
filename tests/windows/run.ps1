@@ -37,6 +37,8 @@ $out = & $rexx paths.rex 2>$null
 Check "HOME, TMPDIR, drives' paths in commands" "1 1 1|1 1|0 0 3" ($out -join "|")
 $out = "line1" | & $rexx io.rex 2>&1
 Check "standard input, a command's input and error" "[line1]|1 banana|1 oops" ($out -join "|")
+$out = & $rexx nested.rex 2>$null
+Check "a nested rexx, its exit code -1" "0 42|43|0|-1" ($out -join "|")
 $out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
 Check "program by absolute Windows path" "[abs]" ($out -join "|")
 # through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
@@ -50,7 +52,6 @@ if ($env:REXXJ_SERVER -and (Test-Path $cb) -and (Test-Path $rjs)) {
 }
 Info "what it sees" info.rex
 Info "commands" cmd.rex
-Info "a nested rexx" nested.rex
 Info "BSF4ooRexx" ..\bsf\basics.rex
 if ($fails) {
     # what the module asked of WASI (Endive's log), for the first failures

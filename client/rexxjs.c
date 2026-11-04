@@ -355,7 +355,7 @@ static int start_command(int s) {
         close_fd(&po[0]); close_fd(&pe[0]); close_fd(&pi[1]);
         if (pid > 0) while (waitpid(pid, NULL, 0) < 0 && errno == EINTR) { }
         free(input); free(c);
-        return frame(s, 'D', id, NULL, -1);
+        return frame(s, 'D', id, NULL, INT32_MIN);   /* not started (Relay.NOT_STARTED) */
     }
     c->pid = pid;
     c->out = po[0];

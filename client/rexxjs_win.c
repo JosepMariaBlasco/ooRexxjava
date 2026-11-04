@@ -582,7 +582,7 @@ static int start_command(void) {
         if (c->err) CloseHandle(c->err);
         free(c->input);
         free(c);
-        return frame('D', id, NULL, -1);
+        return frame('D', id, NULL, INT32_MIN);      /* not started (Relay.NOT_STARTED) */
     }
     CloseHandle(pi.hThread);
     c->process = pi.hProcess;

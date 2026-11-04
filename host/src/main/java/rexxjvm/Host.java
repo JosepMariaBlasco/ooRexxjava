@@ -174,7 +174,7 @@ final class Host {
             run.flush();                          // what the interpreter wrote comes first
             try {
                 int rc = run.relay.command(argv, env, cwd, input, out, err && !(out && same), out && same, rs);
-                return rc < 0 ? UNKNOWN_COMMAND : rc;
+                return rc == Relay.NOT_STARTED ? UNKNOWN_COMMAND : rc;
             } catch (IOException x) {
                 return UNKNOWN_COMMAND;           // the client went away, or the run is ending
             }

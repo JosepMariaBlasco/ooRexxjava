@@ -37,12 +37,15 @@ import java.util.concurrent.atomic.AtomicInteger;
  * length, bytes): what one {@code 'R'} read; 0 is the end of the file, -1 an error.
  * {@code 'o'} and {@code 'e'} (int id, int length, bytes): a command's captured output
  * and error. {@code 'D'} (int id, int status): the command ended (its exit code, 128+n
- * for a signal n, -1 if it could not be started).
+ * for a signal n; {@link #NOT_STARTED} if it could not be started: on Windows an exit
+ * code is any 32-bit value, -1 too).
  */
 final class Relay {
     static final int CHUNK = 64 << 10;
     /** Command flags in a 'C' frame. */
     static final int CAPTURE_OUT = 1, CAPTURE_ERR = 2, SAME = 4, INPUT = 8;
+    /** A 'D' frame's status for a command that could not be started. */
+    static final int NOT_STARTED = Integer.MIN_VALUE;
 
     private final SocketChannel c;
     private volatile boolean closed;
@@ -210,7 +213,8 @@ final class Relay {
     /**
      * Runs a command on the client, with the client's standard streams but for the ones
      * captured: output (into rs[0]), error (into rs[1], or with the output if same), and
-     * input given (if input is not null). Returns its status; -1 if it could not start.
+     * input given (if input is not null). Returns its status; {@link #NOT_STARTED} if it
+     * could not start.
      */
     int command(List<String> argv, Map<String, String> env, String cwd, byte[] input,
                 boolean captureOut, boolean captureErr, boolean same, byte[][] rs) throws IOException {
