@@ -24,7 +24,13 @@ as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
 (users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
 SIGINT (Ctrl-C), SIGTERM and SIGHUP raise HALT in the running program, as
-natively (`tests/halt.sh`). A Java program can host the interpreter (see *Rexx from Java* below, and JSR-223), and Rexx can use Java through BSF4ooRexx, unchanged. ooRexx's official test suite (test/trunk
+natively; a second one while the program has not yet seen the first HALT (a
+program hung where it never looks, waiting on a semaphore, say) ends the
+process, 128 + the signal's number, where natively only SIGKILL would
+(`tests/halt.sh`). When no more threads can be created (a process limit, memory),
+`START` and the like fail with Rexx's Error 48.1, as natively; an
+`OutOfMemoryError` or another `VirtualMachineError` that kills any thread ends
+the process at once with 70, instead of leaving the other threads waiting for it. A Java program can host the interpreter (see *Rexx from Java* below, and JSR-223), and Rexx can use Java through BSF4ooRexx, unchanged. ooRexx's official test suite (test/trunk
 r13347), run with `dist-test/` (`build-test.sh`, the variant with the
 suite's native libraries) by a user other than root: **401 of 405** test
 groups pass (`results/suite-jvm-r13346-sockets.csv`). The four failures depend

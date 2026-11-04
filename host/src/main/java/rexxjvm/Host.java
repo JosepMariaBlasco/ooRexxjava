@@ -56,13 +56,14 @@ final class Host {
             new HostFunction("rexxjvm", "library_directory", List.of(ValType.I32, ValType.I32), i32,
                 (inst, a) -> new long[] { put(inst.memory(), (int) a[0], (int) a[1],
                                               WinPath.toGuest(libraryDirectory())) }),
-            new HostFunction("rexxjvm", "signal_wait", List.of(), i32, (inst, a) -> new long[] { signalWait() }));
+            new HostFunction("rexxjvm", "signal_wait", i32, i32, (inst, a) -> new long[] { signalWait((int) a[0]) }));
     }
 
     /*
      * The host's signals, for a process run (a hosted run gets them from its host,
      * Run.signal). SIGINT (Ctrl-C), SIGTERM and SIGHUP become a HALT in the
-     * running program, as natively: the module's signal thread (compat/orx_wasi_host.c)
+     * running program, as natively (a second one while the first HALT is still unseen
+     * ends the process: signalWait): the module's signal thread (compat/orx_wasi_host.c)
      * waits here for them and calls the interpreter's orxWasmSignal(). Until that thread
      * waits, which is once the interpreter has started, a signal ends the process as
      * the default action would (128 + its number). Only for rexx itself: the tools
@@ -96,13 +97,24 @@ final class Host {
         }
     }
 
-    /** The next signal for the module's signal thread; -1: there are none to wait for. */
-    static int signalWait() {
+    /**
+     * The next signal for the module's signal thread; -1: there are none to wait for.
+     * last: what the last one did (orxWasmSignal: 1 a HALT posted, 0 the previous HALT
+     * still unseen; -1 none yet). With 0 the program is not seeing its HALTs: the signal
+     * ends the run as its default action would (Run.unanswered).
+     */
+    static int signalWait(int last) {
         Run run = Run.current();
         if (run == null || !run.signalsWanted || run.ended()) return -1;
+        if (last == 0) {
+            run.unanswered(run.lastSignal);
+            return -1;
+        }
         run.signalWaiting = true;
         try {
-            return run.signals.take();
+            int sig = run.signals.take();
+            run.lastSignal = sig;
+            return sig;
         } catch (InterruptedException x) {
             Thread.currentThread().interrupt();
             return -1;

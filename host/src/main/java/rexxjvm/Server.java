@@ -171,6 +171,14 @@ public final class Server {
             if (left <= 0) break;
             r.awaitThreads(left, TimeUnit.NANOSECONDS);
         }
+        // and each run's serve, which after its threads still ends its Java threads and
+        // answers its client ('X', the exit code): halting before that, the client saw
+        // the server go away (70) instead of its 143. Only this stop's serve left, or
+        // the time serve gives a run's threads (5 s + 2 s) and a little more.
+        long served = System.nanoTime() + TimeUnit.SECONDS.toNanos(8);
+        while (running.get() > 1 && System.nanoTime() < served) {
+            try { Thread.sleep(10); } catch (InterruptedException x) { break; }
+        }
         try { c.close(); } catch (IOException x) { /* gone */ }
         Runtime.getRuntime().halt(0);
     }

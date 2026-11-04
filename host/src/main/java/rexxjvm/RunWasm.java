@@ -16,6 +16,18 @@ public final class RunWasm {
     private RunWasm() {}
 
     public static void main(String[] args) throws Exception {
+        // a VirtualMachineError (an OutOfMemoryError, say) that kills any thread, the
+        // JVM's own or one Rexx started through Java, ends the process (Run.fatal): the
+        // threads waiting for it would otherwise wait for ever
+        Thread.setDefaultUncaughtExceptionHandler((th, x) -> {
+            try {
+                System.err.print("Exception in thread \"" + th.getName() + "\" ");
+                x.printStackTrace();
+            } catch (Throwable ignored) {
+                // nothing more to say
+            }
+            if (x instanceof VirtualMachineError) Run.fatal();
+        });
         Throwable[] failure = new Throwable[1];
         Thread t = new Thread(null, () -> {
             try { run(args); } catch (Throwable x) { failure[0] = x; }
@@ -23,6 +35,14 @@ public final class RunWasm {
         t.start();
         t.join();
         if (failure[0] instanceof Exception) throw (Exception) failure[0];
+        if (failure[0] instanceof VirtualMachineError) {
+            try {
+                failure[0].printStackTrace();
+            } catch (Throwable ignored) {
+                // nothing more to say
+            }
+            Run.fatal();
+        }
         if (failure[0] != null) throw (Error) failure[0];
     }
 

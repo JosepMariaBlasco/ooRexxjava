@@ -205,6 +205,7 @@ final class Run {
     // the signals the run gets: a HALT in the program once its signal thread waits (Host)
     final LinkedBlockingQueue<Integer> signals = new LinkedBlockingQueue<>();
     volatile boolean signalsWanted, signalWaiting;
+    volatile int lastSignal;
 
     /** The module's JNIEnv *, once known (Natives). */
     volatile int jniEnv;
@@ -403,9 +404,17 @@ final class Run {
                 exit(x.exitCode());
             } catch (Throwable x) {
                 if (!ended) {
-                    System.err.println("thread " + tid + ": " + x);
-                    x.printStackTrace();
-                    if (!embedded) exit(70);
+                    // the report may fail itself (an OutOfMemoryError): the run ends anyway
+                    try {
+                        System.err.println("thread " + tid + ": " + x);
+                        x.printStackTrace();
+                    } catch (Throwable ignored) {
+                        // nothing more to say
+                    }
+                    if (!embedded) {
+                        if (process && x instanceof VirtualMachineError) fatal();
+                        exit(70);
+                    }
                 }
             } finally {
                 threads.remove(Thread.currentThread());
@@ -413,9 +422,20 @@ final class Run {
         }, "wasm-" + tid, STACK);
         t.setDaemon(true);
         threads.add(t);
-        t.start();
+        try {
+            t.start();
+        } catch (OutOfMemoryError x) {
+            // no more threads ("unable to create native thread": a process or memory
+            // limit): pthread_create fails with EAGAIN, as natively, instead of the error
+            // going through the module and leaving the other threads waiting for this one
+            threads.remove(t);
+            return -EAGAIN;
+        }
         return tid;
     }
+
+    /** WASI's errno EAGAIN: thread-spawn gives -errno on failure (wasi-libc's pthread_create). */
+    private static final int EAGAIN = 6;
 
     /** Runs an export on a new Instance for the current thread (a wasm thread's entry point). */
     long[] runOn(String export, long... args) {
@@ -484,6 +504,36 @@ final class Run {
         } else {
             end(128 + number);
         }
+    }
+
+    /**
+     * A signal that found the previous HALT still unseen (Host.signalWait): the program
+     * is not answering them, so it ends the run as the signal's default action would,
+     * 128 + its number, as before the program waits for signals.
+     */
+    void unanswered(int number) {
+        if (process) {
+            System.out.flush();
+            Runtime.getRuntime().halt(128 + number);
+        } else {
+            end(128 + number);
+        }
+    }
+
+    /**
+     * The end of a process run after a VirtualMachineError (an OutOfMemoryError, say) in
+     * one of its threads: at once, 70, without System.exit's shutdown, which could need
+     * the memory or the locks the failed thread had; the other threads would otherwise
+     * wait for it for ever.
+     */
+    static void fatal() {
+        try {
+            System.out.flush();
+            System.err.flush();
+        } catch (Throwable ignored) {
+            // nothing more to do
+        }
+        Runtime.getRuntime().halt(70);
     }
 
     boolean ended() { return ended; }

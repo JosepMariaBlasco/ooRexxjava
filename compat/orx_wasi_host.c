@@ -45,7 +45,7 @@ void rxj_api_close(int handle);
 RXJ_IMPORT(api_start_server)
 int rxj_api_start_server(void);
 RXJ_IMPORT(signal_wait)
-int rxj_signal_wait(void);
+int rxj_signal_wait(int last);
 
 int orxWasmCommandRun(char **argv, char **envp, const char *cwd,
                       const char *input, int inputLength, int flags)
@@ -114,21 +114,26 @@ int orxWasiApiStartServer(void) { return rxj_api_start_server(); }
    Calling the export from a thread of the JVM's own would have no stack or
    thread-local storage of its own in the module: this is a thread of the
    program. rxj_signal_wait() returns -1 when the launcher gives no signals
-   (a tool, or a JVM without sun.misc.Signal): the thread ends. */
+   (a tool, or a JVM without sun.misc.Signal): the thread ends. It is told what
+   the last signal did: 1 a HALT posted, 0 the previous HALT still unseen by the
+   program, -1 none yet; with 0 the launcher ends the process as the signal's
+   default action would (a program that does not see its HALTs is hung: a
+   second SIGTERM or Ctrl-C ends it; natively only SIGKILL would). */
 #include <pthread.h>
 int orxWasmSignal(int sig);
 
 static void *orx_wasi_signal_thread(void *unused)
 {
     (void)unused;
+    int last = -1;
     for (;;)
     {
-        int sig = rxj_signal_wait();
+        int sig = rxj_signal_wait(last);
         if (sig < 0)
         {
             return NULL;
         }
-        orxWasmSignal(sig);
+        last = orxWasmSignal(sig);
     }
 }
 
