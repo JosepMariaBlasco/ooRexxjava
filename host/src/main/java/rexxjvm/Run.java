@@ -349,7 +349,8 @@ final class Run {
      * the first argument that is not an option or an option's value (-o and -od take
      * one: rexx.cpp; none after -e, whose program is text); for rexxc, its file names;
      * for the test suite's rexxinstance, its program, after the call type and the
-     * options (each with a value: testbinaries/rexxinstance.cpp). Other arguments go to
+     * options (each with a value: testbinaries/rexxinstance.cpp; -PATH's, a directory,
+     * in the module's form too). Other arguments go to
      * the program as they are.
      */
     static List<String> guestArgs(List<String> argv) {
@@ -362,6 +363,7 @@ final class Run {
             String a = l.get(i);
             if (a.startsWith("-")) {
                 if (tool == null && a.equals("-e")) break;
+                if (instance && a.equals("-PATH") && i + 1 < l.size()) l.set(i + 1, WinPath.toGuest(l.get(i + 1)));
                 if (instance || (tool == null && (a.equalsIgnoreCase("-o") || a.equalsIgnoreCase("-od")))) i++;
                 continue;
             }
