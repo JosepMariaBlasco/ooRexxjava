@@ -302,18 +302,40 @@ its file system, as in MSYS and Git Bash: `C:\Users\x` is `/c/Users/x`
 (`host/.../WinPath.java`). The launcher translates where Windows paths come in or
 go out: the current directory, `PATH` (`;` and `:`), the program's name on the
 command line (`rexx C:\x\p.rex`, `rexx sub\p.rex`), `.RexxInfo~executable` and
-`~libraryPath`, and a command's name, directory and `PATH`. Other environment
-variables stay as Windows has them (`TEMP` is `C:\...`), and paths that a program
-builds stay in the module's form: a command given `/c/x` does not understand it.
+`~libraryPath`, `HOME` and `TMPDIR` (from `USERPROFILE` and `TEMP` when they are
+not set: `qualify('~')`, `cd ~` and temporary files, which would otherwise go to
+`/tmp`), and a command's name, directory, `PATH`, `HOME` and `TMPDIR`. In a
+command line for `cmd.exe`, every word that is a path on a drive (`/c`,
+`/d/a/x`) goes to Windows' form (`"/d/a/rexx.cmd" p < /d/in` runs as
+`"D:\a\rexx.cmd" p < D:\in`), and so do `ADDRESS PATH`'s arguments that are one;
+other environment variables stay as Windows has them (`TEMP` is `C:\...`).
 
 Commands: `ADDRESS SYSTEM`, `COMMAND`, `""` and `SH` run through `%ComSpec%`
 (`cmd.exe /s /c`), as natively on Windows; `ADDRESS BASH` and the other shells are
 looked up in `PATH` (Git Bash's `bash`, say); `ADDRESS PATH` looks the command up
 with `PATHEXT`. There is no `ADDRESS CMD`: the Unix interpreter does not have it.
 
+ooRexx's test suite (test/trunk r13359) on Windows, Java 25, one JVM per group
+(`.github/workflows/windows-suite.yml`, on demand; `dist-test/` with its tools'
+`.cmd`, run from Git Bash with `oorexxwasm`'s `tests/run-suite.sh`,
+04/11/2026, `results/suite-jvm-r13358-windows-java25-final.csv`): **394 of
+405** in about 19 minutes, 24,440 tests, 23 failures, 1 error. The interpreter
+under Node on Windows (`oorexxwasm`) has 393. What fails is a Unix-flavoured
+interpreter on a Windows host, by design: the suite takes WASI for a Unix and
+expects `sh` (`ADDRESS`, `OPTIONS`, `SysSearchPath`, `File~searchPath`), `id -u`
+for its root check (`STREAM`, `Stream`), `rexx` as the executable's name
+(`RexxInfo`, here `rexx.cmd`) and case-sensitive file names (`CALL`); read-only
+directories stay writable on Windows (`File`), and `SysFileTree` of `TEMP` meets
+a file whose attributes it does not expect. `TRACE` and `SysSleep` are timing
+(Windows' timer). The first run had 377 (`suite-jvm-r13358-windows-java25.csv`),
+before commands got drives' paths in Windows' form, `HOME` and `TMPDIR`, and the
+test tools' `.cmd`.
+
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
-three functions that need it on Windows (reported: bytecodealliance/endive#280).
+three functions that need it on Windows (reported: bytecodealliance/endive#280;
+the fix, bytecodealliance/endive#282, is checked on Windows by
+`.github/workflows/windows-endive.yml`, with WinWasi off: `-Drexxjvm.winwasi=false`).
 The warm JVM (`rexxjs`) is not there yet: `REXXJ_SERVER` is ignored. `Unsafe`:
 on Java 23 and later the launchers pass `--sun-misc-unsafe-memory-access=allow`,
 so that JDK 24 and later do not warn on every run (the version is read from the
