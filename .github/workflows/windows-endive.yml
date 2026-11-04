@@ -1,0 +1,71 @@
+# rexxj on Windows with an Endive WASI under review instead of WinWasi (endive#280):
+# the Linux job builds rexxj.jar as windows.yml does, compiles Endive's wasi module
+# from REPO at REF, and puts its WasiPreview1 classes in the jar (WasiPreview1 uses no
+# runtime API newer than our Endive's); the Windows job runs tests/windows with
+# -Drexxjvm.winwasi=false (WinWasi off: Endive's own fd_filestat_get, path_filestat_get
+# and fd_readdir).
+name: windows-endive
+on:
+  workflow_dispatch:
+    inputs:
+      repo:
+        description: Endive repository
+        default: JosepMariaBlasco/endive
+      ref:
+        description: Branch or commit
+        default: wasi-windows-filestat
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The saved build's dist
+        run: |
+          git fetch -q --depth 1 origin saved-build
+          mkdir -p "$RUNNER_TEMP/saved" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/saved"
+          tar -xzf "$RUNNER_TEMP/saved/oorexxjava-dist.tar.gz" dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: rexxj.jar
+        run: |
+          scripts/endive-compiler.sh
+          (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$GITHUB_WORKSPACE/dist/rexx.wasm")
+          cp host/target/rexxj.jar dist/
+          cp launchers/windows/*.cmd dist/
+      - name: Endive's wasi from ${{ inputs.repo }} at ${{ inputs.ref }}, into rexxj.jar
+        run: |
+          git clone -q --depth 1 -b "${{ inputs.ref }}" "https://github.com/${{ inputs.repo }}" "$RUNNER_TEMP/endive"
+          (cd "$RUNNER_TEMP/endive" && mvn -q -B -Dquickly install -pl wasi -am)
+          C="$RUNNER_TEMP/endive/wasi/target/classes"
+          (cd "$C" && ls run/endive/wasi/WasiPreview1*.class && jar uf "$GITHUB_WORKSPACE/dist/rexxj.jar" run/endive/wasi/WasiPreview1*.class)
+          git -C "$RUNNER_TEMP/endive" log -1 --oneline
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 7
+  test:
+    needs: jar
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [21, 25]
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: tests/windows, WinWasi off
+        shell: pwsh
+        env:
+          REXXJ_JAVA_OPTIONS: -Drexxjvm.winwasi=false
+        run: tests/windows/run.ps1 dist

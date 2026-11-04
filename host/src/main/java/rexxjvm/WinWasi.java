@@ -51,10 +51,14 @@ final class WinWasi {
         get.setAccessible(true);
     }
 
-    /** WASI's host functions, with the three replaced on Windows; as they are elsewhere. */
+    /**
+     * WASI's host functions, with the three replaced on Windows; as they are elsewhere.
+     * -Drexxjvm.winwasi=false: Endive's own on Windows too (to try an Endive with the fix,
+     * .github/workflows/windows-endive.yml).
+     */
     static HostFunction[] functions(WasiPreview1 wasi) {
         HostFunction[] fs = wasi.toHostFunctions();
-        if (!WinPath.WINDOWS) return fs;
+        if (!WinPath.WINDOWS || !Boolean.parseBoolean(System.getProperty("rexxjvm.winwasi", "true"))) return fs;
         WinWasi w;
         try {
             w = new WinWasi(wasi);
