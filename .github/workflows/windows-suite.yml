@@ -67,6 +67,9 @@ jobs:
       - name: rexxjs.exe, the warm JVM's client (client/rexxjs_win.c), with MinGW-w64
         run: |
           sudo apt-get install -y -qq gcc-mingw-w64-x86-64 >/dev/null
+          # not the Linux rexxjs beside it: Git Bash's tar takes rexxjs for rexxjs.exe
+          # (MSYS's .exe handling) and would write one over the other
+          rm -f "$RUNNER_TEMP/in/dist-test/rexxjs"
           x86_64-w64-mingw32-gcc -O2 -Wall -municode -o "$RUNNER_TEMP/in/dist-test/rexxjs.exe" client/rexxjs_win.c -lws2_32 -static
       - name: The suite (test/trunk r${{ inputs.test_rev }}) and oorexxwasm's tools
         run: |

@@ -252,7 +252,8 @@ several in one JVM"); the test is `tests/multirun/`. `Run` is not public yet.
 
 With `REXXJ_SERVER` set, `rexxj` (and so `rexx`, `rexxc`, `rxqueue`,
 `rxsubcom`, which run it) hands the program to `rexxjs`, a small native client
-(`client/rexxjs.c`, Linux, built by `build.sh` when there is a C compiler).
+(`client/rexxjs.c`, Linux, built by `build.sh` when there is a C compiler;
+on Windows `rexxjs.exe`, below).
 `rexxjs` sends its arguments, environment, current directory and pid to
 `rexxjvm.Server`, a JVM that keeps the module warm and runs each program as a
 run of its own (above); the server opens the client's standard streams itself
@@ -336,7 +337,18 @@ Endive's WASI reads files' attributes through a view Windows does not have
 three functions that need it on Windows (reported: bytecodealliance/endive#280;
 the fix, bytecodealliance/endive#282, is checked on Windows by
 `.github/workflows/windows-endive.yml`, with WinWasi off: `-Drexxjvm.winwasi=false`).
-The warm JVM (`rexxjs`) is not there yet: `REXXJ_SERVER` is ignored. `Unsafe`:
+The warm JVM works on Windows too: `rexxjs.exe` (`client/rexxjs_win.c`, built
+with MinGW-w64: `x86_64-w64-mingw32-gcc -O2 -municode -o rexxjs.exe
+client/rexxjs_win.c -lws2_32 -static`; not built by `build.sh` yet, the
+workflows build it), next to the `.cmd` launchers, which run it when
+`REXXJ_SERVER` is set. It needs Windows 10 1803 or later (`AF_UNIX` sockets);
+the streams are always relayed (no `/proc`), the server's socket is in `%TEMP%`,
+Ctrl+C and Ctrl+Break are a HALT (with `rexxj.cmd`, Ctrl+Break is Java's thread
+dump), and when it cannot run the program it runs `rexxj.cmd`. `say 'hi'` takes
+60–80 ms instead of 0.5–0.9 s on the runner; `tests/windows` passes both ways.
+The server frees each program's memory as it ends: on Windows `malloc` commits
+the whole 2 GB reservation, and blocks left to the garbage collector kept other
+JVMs from starting. `Unsafe`:
 on Java 23 and later the launchers pass `--sun-misc-unsafe-memory-access=allow`,
 so that JDK 24 and later do not warn on every run (the version is read from the
 `release` file of the `java` in `PATH`; without one, as behind Oracle's
