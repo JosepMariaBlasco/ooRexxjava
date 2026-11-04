@@ -1,0 +1,137 @@
+# ooRexx's official test suite on Windows (step 3 of the warm JVM's plan,
+# docs/java-from-rexx-design.md). On demand only:
+#   gh api -X POST repos/JosepMariaBlasco/ooRexxjava/actions/workflows/windows-suite.yml/dispatches \
+#     -f ref=main -f 'inputs[pattern]=.'
+# A Linux job builds dist-test/ over the saved build (as windows.yml builds dist/:
+# the jar again, the C side not; it fails if the C inputs changed: rebuild and
+# publish the saved build first), exports test/trunk and takes oorexxwasm's
+# tests/run-suite.sh (one process per group, CSV) and suite-check.py. The Windows
+# job runs the suite from Git Bash, one JVM per group (no warm JVM on Windows yet),
+# and compares the run with ours on Linux (405/405) and with oorexxwasm's on
+# Windows (the same interpreter under Node, 393/405: what a Unix-flavoured
+# interpreter meets on a Windows host); both comparisons go to the run's summary
+# and never fail the job. The CSV and the logs are an artifact.
+name: windows-suite
+on:
+  workflow_dispatch:
+    inputs:
+      pattern:
+        description: Only test groups matching this regular expression
+        default: '.'
+      jobs:
+        description: Groups run at the same time
+        default: '2'
+      java:
+        description: Java version
+        default: '25'
+      test_rev:
+        description: test/trunk revision
+        default: '13359'
+jobs:
+  prepare:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+      - name: The saved build's dist-test, if its C inputs are this checkout's
+        run: |
+          git fetch -q --depth 1 origin saved-build
+          mkdir -p "$RUNNER_TEMP/saved" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/saved"
+          C=' (0001-[^ ]*\.patch|wasi-p1-threads\.cmake|compat/.*)$'
+          grep -E "$C" "$RUNNER_TEMP/saved/MANIFEST" > "$RUNNER_TEMP/saved.c"
+          (git ls-files -- 0001-wasi-on-top-of-oorexxwasm-0001.patch wasi-p1-threads.cmake compat \
+             | LC_ALL=C sort | xargs sha256sum) | grep -E "$C" > "$RUNNER_TEMP/now.c"
+          diff "$RUNNER_TEMP/saved.c" "$RUNNER_TEMP/now.c" \
+            || { echo "::error::the saved build is for other C sources: rebuild and publish it"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/in"
+          tar -xzf "$RUNNER_TEMP/saved/oorexxjava-dist.tar.gz" -C "$RUNNER_TEMP/in" dist-test
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: rexxj.jar for dist-test
+        run: |
+          D=$RUNNER_TEMP/in/dist-test
+          scripts/endive-compiler.sh
+          (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$D/rexx.wasm")
+          cp host/target/rexxj.jar "$D/"
+          cp launchers/windows/*.cmd "$D/"
+      - name: The suite (test/trunk r${{ inputs.test_rev }}) and oorexxwasm's tools
+        run: |
+          sudo apt-get update -qq && sudo apt-get install -y -qq subversion
+          svn export -q -r "${{ inputs.test_rev }}" https://svn.code.sf.net/p/oorexx/code-0/test/trunk "$RUNNER_TEMP/in/oorexx-test"
+          git clone -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$RUNNER_TEMP/oorexxwasm"
+          git -C "$RUNNER_TEMP/oorexxwasm" log -1 --oneline
+          mkdir -p "$RUNNER_TEMP/in/tools/tests/suite-browser" "$RUNNER_TEMP/in/tools/results"
+          cp "$RUNNER_TEMP/oorexxwasm/tests/run-suite.sh" "$RUNNER_TEMP/oorexxwasm/tests/suite-check.py" "$RUNNER_TEMP/in/tools/tests/"
+          cp "$RUNNER_TEMP/oorexxwasm/tests/suite-browser/known.tsv" "$RUNNER_TEMP/in/tools/tests/suite-browser/"
+          cp "$RUNNER_TEMP/oorexxwasm/results/suite-windows-r${{ inputs.test_rev }}-series.csv" "$RUNNER_TEMP/in/tools/results/" || true
+          tar -C "$RUNNER_TEMP/in" -czf "$RUNNER_TEMP/windows-suite.tar.gz" dist-test oorexx-test tools
+      - uses: actions/upload-artifact@v4
+        with:
+          name: windows-suite-input
+          path: ${{ runner.temp }}/windows-suite.tar.gz
+          retention-days: 1
+  suite:
+    needs: prepare
+    runs-on: windows-latest
+    timeout-minutes: 240
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java }}
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+      - uses: actions/download-artifact@v4
+        with:
+          name: windows-suite-input
+          path: input
+      - name: Unpack
+        run: |
+          W=$(cd .. && pwd); tar -C "$W" -xzf input/windows-suite.tar.gz
+          D=$(cygpath -w "$W/dist-test")
+          # commands that tests run (rexx, rxqueue...) are dist-test's .cmd launchers
+          echo "$D" >> "$GITHUB_PATH"
+          # the suite's own rexx: java directly (as rexxj.cmd runs it), so that cmd.exe
+          # does not expand the arguments a second time
+          V=$(java -XshowSettings:properties -version 2>&1 | sed -n 's/^ *java.specification.version = //p')
+          U=; [ "${V%%.*}" -ge 23 ] && U=--sun-misc-unsafe-memory-access=allow
+          {
+            echo '#!/bin/bash'
+            echo "exec java -Xss16m $U \"-Drexxjvm.executable=$D\\rexx.cmd\" \"-Drexxjvm.home=$D\" \"-javaagent:$D\\rexxj.jar\" -cp \"$D\\rexxj.jar;$D\\bsf4oorexx.jar\" rexxjvm.RunWasm \"\$@\""
+          } > "$W/dist-test/rexx-bash"
+          chmod +x "$W/dist-test/rexx-bash"; cat "$W/dist-test/rexx-bash"
+          "$W/dist-test/rexx-bash" -e 'parse version v; say v; say .RexxInfo~platform .RexxInfo~executable directory()'
+      - name: Run the suite
+        run: |
+          W=$(cd .. && pwd)
+          SUITE="$W/oorexx-test" "$W/tools/tests/run-suite.sh" "$W/dist-test/rexx-bash" "$RUNNER_TEMP/suite-windows" \
+            "${{ inputs.jobs }}" 300 "${{ inputs.pattern }}"
+      - name: Compare (ours on Linux; oorexxwasm's on Windows)
+        if: always()
+        continue-on-error: true
+        run: |
+          W=$(cd .. && pwd); OUT=$RUNNER_TEMP/suite-windows
+          { echo "## ooRexx on the JVM, Windows, Java ${{ inputs.java }}, test/trunk r${{ inputs.test_rev }}"; echo
+            awk -F, 'NR>1{n++; s[$2]++; ran+=$3; f+=$5; e+=$6} END{printf "groups %d:", n; for(k in s) printf " %s=%d", k, s[k]; printf " | tests %d failures %d errors %d\n", ran, f, e}' "$OUT/results.csv"
+            echo; } >> "$GITHUB_STEP_SUMMARY"
+          for base in results/suite-jvm-r13358-bsf1131-server.csv "$W/tools/results/suite-windows-r${{ inputs.test_rev }}-series.csv"; do
+            [ -f "$base" ] || continue
+            { echo "### Against \`$(basename "$base")\`"; echo; } >> "$GITHUB_STEP_SUMMARY"
+            python "$W/tools/tests/suite-check.py" "$base" "$OUT/results.csv" --pattern "${{ inputs.pattern }}" --md "$OUT/check.md" || true
+            cat "$OUT/check.md" >> "$GITHUB_STEP_SUMMARY"; echo >> "$GITHUB_STEP_SUMMARY"
+          done
+      - name: Keep the results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: suite-windows-java${{ inputs.java }}
+          path: ${{ runner.temp }}/suite-windows
+          if-no-files-found: ignore
