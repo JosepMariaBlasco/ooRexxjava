@@ -39,6 +39,7 @@ jobs:
         run: |
           sudo apt-get install -y -qq gcc-mingw-w64-x86-64 >/dev/null
           x86_64-w64-mingw32-gcc -O2 -Wall -municode -o dist/rexxjs.exe client/rexxjs_win.c -lws2_32 -static
+          x86_64-w64-mingw32-gcc -O2 -Wall -municode -o dist/test-ctrlbreak.exe tests/windows/ctrlbreak.c -static
       - uses: actions/upload-artifact@v4
         with:
           name: dist

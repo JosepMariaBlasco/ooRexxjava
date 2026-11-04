@@ -35,10 +35,19 @@ $out = & $rexx cmds.rex 2>$null
 Check "commands" "3|1 o|""a b""|127" ($out -join "|")
 $out = & $rexx paths.rex 2>$null
 Check "HOME, TMPDIR, drives' paths in commands" "1 1 1|1 1|0 0 3" ($out -join "|")
-$out = "line1" | & $rexx io.rex 2>$null
+$out = "line1" | & $rexx io.rex 2>&1
 Check "standard input, a command's input and error" "[line1]|1 banana|1 oops" ($out -join "|")
 $out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
 Check "program by absolute Windows path" "[abs]" ($out -join "|")
+# through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
+# windows.yml as test-ctrlbreak.exe; Java takes Ctrl+Break for a thread dump)
+$cb = Join-Path (Resolve-Path $Dist) "test-ctrlbreak.exe"
+$rjs = Join-Path (Resolve-Path $Dist) "rexxjs.exe"
+if ($env:REXXJ_SERVER -and (Test-Path $cb) -and (Test-Path $rjs)) {
+    $out = & $cb 4000 $rjs halt.rex 2>$null
+    Check "Ctrl+Break, a HALT" "halted" ($out -join "|")
+    Check "Ctrl+Break, exit code" 5 $LASTEXITCODE
+}
 Info "what it sees" info.rex
 Info "commands" cmd.rex
 Info "BSF4ooRexx" ..\bsf\basics.rex
