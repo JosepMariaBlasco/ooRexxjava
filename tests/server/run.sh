@@ -10,6 +10,9 @@
 #   program's reading reached, as with rexxj (stdin-cmd.rex);
 # - commands with captured input, output and error, large (capture.rex); a HALT
 #   while a command runs (halt-cmd.rex);
+# - a client whose streams the server cannot open through /proc (another user's pipes:
+#   sudo -u from a root shell) is relayed instead, and its commands too; only as root,
+#   with REXXJ_TEST_USER (default claude) able to read DIST;
 # - rexxjs --orx-server-stop ends the server and its programs (143); the next run
 #   starts a new one.
 # REXXJ_SERVER_RELAY=1 tests/server/run.sh runs it all with the streams relayed through
@@ -53,6 +56,18 @@ check "a command's standard input (server)" "rexx: 1|1|1042|rexx: 2|rexx: 3" "$(
 check "captured streams" "50000 line 50000 | 300000 300000 | 3 1 err" "$("$D/rexx" capture.rex)"
 "$D/rexx" halt-cmd.rex > "$T/h.txt" & sleep 3; kill -TERM $!; wait $!; rc=$?
 check "a HALT while a command runs" "start|HALT 9" "$(tr '\n' '|' < "$T/h.txt" | sed 's/|$//') $rc"
+
+U=${REXXJ_TEST_USER:-claude}
+if [ "$(id -u)" = 0 ] && id "$U" >/dev/null 2>&1; then
+  printf 'parse pull x; say "got" x; "echo cmd"; exit 3\n' > "$T/other.rex"
+  chmod o+rx "$T"; chmod o+r "$T/other.rex"
+  echo abc | sudo -u "$U" env -u JAVA_TOOL_OPTIONS HOME=/tmp REXXJ_SERVER=1 "$D/rexx" "$T/other.rex" 2>&1 | cat > "$T/other.txt"
+  rc=${PIPESTATUS[1]}
+  check "another user's pipes: relayed" "got abc|cmd| 3" "$(tr '\n' '|' < "$T/other.txt") $rc"
+  sudo -u "$U" "$D/rexxjs" --orx-server-stop 2>/dev/null
+else
+  echo "skip another user's pipes (not root, or no user $U)"
+fi
 
 printf 'say "start"; call SysSleep 30; say "never"\n' > "$T/long.rex"
 "$D/rexx" "$T/long.rex" > "$T/long.txt" & sleep 3

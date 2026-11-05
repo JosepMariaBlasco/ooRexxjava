@@ -47,7 +47,10 @@ import java.util.concurrent.atomic.AtomicInteger;
  * input from one starts at the client's offset. The commands the program runs get the
  * same files. Then the client may send {@code 'S'} and a signal number, any number of
  * times (a HALT, as natively), and the server answers once {@code 'X'}, the exit code,
- * and the offset its standard input reached (-1 if not a regular file).
+ * and the offset its standard input reached (-1 if not a regular file). If it cannot
+ * open one of the streams (a pipe of another user's: {@code sudo -u} from a root shell),
+ * it answers {@code 'N'} instead (same length) before running anything, and the client
+ * asks again, relayed.
  *
  * <p>{@code 'R'}, relayed (where there is no {@code /proc}; on Linux when the client is
  * asked to, {@code REXXJ_SERVER_RELAY}): the streams go through the socket as frames,
@@ -237,13 +240,23 @@ public final class Server {
             } else {
                 // the client's streams opened here, as the same user may on Linux
                 String proc = "/proc/" + pid + "/fd/";
-                in = FileChannel.open(Path.of(proc + 0), StandardOpenOption.READ);
-                open.add(in);
-                if (kind[0] == 'F' && offset[0] > 0) in.position(offset[0]);
-                FileChannel out = output(Path.of(proc + 1), kind[1]);
-                open.add(out);
-                FileChannel err = output(Path.of(proc + 2), kind[2]);
-                open.add(err);
+                FileChannel out, err;
+                try {
+                    in = FileChannel.open(Path.of(proc + 0), StandardOpenOption.READ);
+                    open.add(in);
+                    if (kind[0] == 'F' && offset[0] > 0) in.position(offset[0]);
+                    out = output(Path.of(proc + 1), kind[1]);
+                    open.add(out);
+                    err = output(Path.of(proc + 2), kind[2]);
+                    open.add(err);
+                } catch (IOException x) {
+                    // a stream we may not open (a pipe of another user's, say): nothing
+                    // has run, so the client asks again, relayed ('N', then as 'X')
+                    ByteBuffer answer = ByteBuffer.allocate(13);
+                    answer.put((byte) 'N').putInt(0).putLong(-1).flip();
+                    while (answer.hasRemaining()) c.write(answer);
+                    return;
+                }
                 o.in = Channels.newInputStream(in);
                 o.out = Channels.newOutputStream(out);
                 o.err = Channels.newOutputStream(err);

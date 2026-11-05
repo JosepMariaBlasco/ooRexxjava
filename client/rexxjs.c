@@ -546,6 +546,54 @@ static int stdin_at(char **argv) {
     return WIFEXITED(st) ? WEXITSTATUS(st) : 127;
 }
 
+/*
+ * The request (Server.java): our pid and ppid, directory, arguments, environment (this
+ * directory first in PATH, as rexxj puts it), the kinds and offsets of our standard
+ * streams, and the mode, relayed or not.
+ */
+static int request(int s, char **argv, const char *kind, const int64_t *offset, int relayed) {
+    buf b = { 0 };
+    put(&b, "RXJ2", 4);
+    put32(&b, (uint32_t)getpid());
+    put32(&b, (uint32_t)getppid());
+    char cwd[PATH_MAX];
+    putstr(&b, getcwd(cwd, sizeof cwd) ? cwd : "/");
+    int nargs = 0;
+    for (char **a = argv + 1; *a; a++) nargs++;
+    put32(&b, (uint32_t)nargs);
+    for (char **a = argv + 1; *a; a++) putstr(&b, *a);
+    const char *oldpath = getenv("PATH");
+    char *newpath = malloc(strlen(dir) + (oldpath ? strlen(oldpath) : 0) + 8);
+    sprintf(newpath, "PATH=%s%s%s", dir, oldpath ? ":" : "", oldpath ? oldpath : "");
+    int nenv = 1;
+    for (char **e = environ; *e; e++) if (strncmp(*e, "PATH=", 5) != 0) nenv++;
+    put32(&b, (uint32_t)nenv);
+    putstr(&b, newpath);
+    for (char **e = environ; *e; e++) if (strncmp(*e, "PATH=", 5) != 0) putstr(&b, *e);
+    free(newpath);
+    for (int fd = 0; fd < 3; fd++) {
+        put(&b, &kind[fd], 1);
+        put64(&b, (uint64_t)offset[fd]);
+    }
+    put(&b, relayed ? "R" : "P", 1);
+    int r = write_all(s, b.p, b.n);
+    free(b.p);
+    return r;
+}
+
+/* relayed, a command's end comes as SIGCHLD; a broken pipe to one, as EPIPE */
+static void relay_signals(void) {
+    struct sigaction sa;
+    memset(&sa, 0, sizeof sa);
+    sa.sa_handler = on_signal;
+    sigemptyset(&sa.sa_mask);
+    sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
+    sigaction(SIGCHLD, &sa, NULL);
+    sa.sa_handler = SIG_IGN;
+    sa.sa_flags = 0;
+    sigaction(SIGPIPE, &sa, &pipe_was);
+}
+
 int main(int argc, char **argv) {
     (void)argc;
     char self[PATH_MAX];
@@ -640,49 +688,12 @@ int main(int argc, char **argv) {
         if (s < 0) fallback(argv);
     }
 
-    /* the request */
-    buf b = { 0 };
-    put(&b, "RXJ2", 4);
-    put32(&b, (uint32_t)getpid());
-    put32(&b, (uint32_t)getppid());
-    char cwd[PATH_MAX];
-    putstr(&b, getcwd(cwd, sizeof cwd) ? cwd : "/");
-    int nargs = 0;
-    for (char **a = argv + 1; *a; a++) nargs++;
-    put32(&b, (uint32_t)nargs);
-    for (char **a = argv + 1; *a; a++) putstr(&b, *a);
-    /* the environment, with this directory first in PATH, as rexxj puts it */
-    const char *oldpath = getenv("PATH");
-    char *newpath = malloc(strlen(dir) + (oldpath ? strlen(oldpath) : 0) + 8);
-    sprintf(newpath, "PATH=%s%s%s", dir, oldpath ? ":" : "", oldpath ? oldpath : "");
-    int nenv = 1;
-    for (char **e = environ; *e; e++) if (strncmp(*e, "PATH=", 5) != 0) nenv++;
-    put32(&b, (uint32_t)nenv);
-    putstr(&b, newpath);
-    for (char **e = environ; *e; e++) if (strncmp(*e, "PATH=", 5) != 0) putstr(&b, *e);
-    for (int fd = 0; fd < 3; fd++) {
-        put(&b, &kind[fd], 1);
-        put64(&b, (uint64_t)offset[fd]);
-    }
-    put(&b, relayed ? "R" : "P", 1);
-
     if (pipe_cloexec(sigpipe_fds) < 0) { perror("rexxjs"); return 70; }
     forward(SIGINT);
     forward(SIGTERM);
     forward(SIGHUP);
-    if (relayed) {
-        /* a command's end comes as SIGCHLD; a broken pipe to one, as EPIPE */
-        struct sigaction sa;
-        memset(&sa, 0, sizeof sa);
-        sa.sa_handler = on_signal;
-        sigemptyset(&sa.sa_mask);
-        sa.sa_flags = SA_RESTART | SA_NOCLDSTOP;
-        sigaction(SIGCHLD, &sa, NULL);
-        sa.sa_handler = SIG_IGN;
-        sa.sa_flags = 0;
-        sigaction(SIGPIPE, &sa, &pipe_was);
-    }
-    if (write_all(s, b.p, b.n) < 0) {
+    if (relayed) relay_signals();
+    if (request(s, argv, kind, offset, relayed) < 0) {
         fprintf(stderr, "rexxjs: the server went away\n");
         return 70;
     }
@@ -715,6 +726,19 @@ int main(int argc, char **argv) {
             got += (size_t)r;
             if (got == sizeof ans) break;
         }
+    }
+    if (ans[0] == 'N') {
+        /* the server cannot open our streams (a pipe of another user's: sudo -u from a
+           root shell), and has run nothing: the same, relayed through the socket */
+        close(s);
+        s = connect_to(path);
+        if (s < 0) fallback(argv);
+        relay_signals();
+        if (request(s, argv, kind, offset, 1) < 0) {
+            fprintf(stderr, "rexxjs: the server went away\n");
+            return 70;
+        }
+        return relay(s);
     }
     if (ans[0] != 'X') {
         fprintf(stderr, "rexxjs: unexpected answer from the server\n");
