@@ -63,8 +63,17 @@ BSF_CC=BSF4ooRexx/bsf4oorexx.dev/source_cc/BSF4ooRexx.cc
   -I oorexx/api -I oorexx/api/platform/unix -I "$C/jni" -I "$JNI_INCLUDE" -c "$BSF_CC" -o bsf.o
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -I "$C/jni" -I "$JNI_INCLUDE" -c "$C/orx_bsf.c" -o bsf-lib.o
 BSF_EXPORTS=$("$W/bin/llvm-nm" --defined-only --extern-only bsf.o | awk '$2 == "T" && $3 ~ /^Java_/ {printf " -Wl,--export=%s", $3}')
-LF="$WORK/stubs.o $WORK/host.o $WORK/fs.o $WORK/net.o $WORK/embed.o $WORK/jni.o $WORK/bsf.o $WORK/bsf-lib.o$BSF_EXPORTS -fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
+LF_LIBS="-fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
+LF="$WORK/stubs.o $WORK/host.o $WORK/fs.o $WORK/net.o $WORK/embed.o $WORK/jni.o $WORK/bsf.o $WORK/bsf-lib.o$BSF_EXPORTS $LF_LIBS"
 sed "s|^\tset(WASI_SDK_PREFIX .*|\tset(WASI_SDK_PREFIX $W)|" "$HERE/wasi-p1-threads.cmake" > toolchain.cmake
+# a fresh tree: configure first without our objects, which need the interpreter's own
+# symbols (RexxCreateInterpreter...) and make CMake's compiler checks fail to link; the
+# checks' results stay in the cache, and the second configure below only adds them
+if [ ! -f build/CMakeCache.txt ]; then
+  cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
+    -DCMAKE_C_FLAGS="$CF" -DCMAKE_CXX_FLAGS="$CF" -DCMAKE_EXE_LINKER_FLAGS="$LF_LIBS" \
+    -DCMAKE_CROSSCOMPILING_EMULATOR="$WORK/runwasm"
+fi
 cmake -S oorexx -B build -DCMAKE_TOOLCHAIN_FILE="$WORK/toolchain.cmake" -DCMAKE_BUILD_TYPE=Release \
   -DCMAKE_C_FLAGS="$CF" -DCMAKE_CXX_FLAGS="$CF" -DCMAKE_EXE_LINKER_FLAGS="$LF" \
   -DCMAKE_CROSSCOMPILING_EMULATOR="$WORK/runwasm"
