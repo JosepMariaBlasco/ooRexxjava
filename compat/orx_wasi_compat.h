@@ -78,7 +78,7 @@ int orx_wasi_symlink(const char *, const char *);
 #define fstat(f, b)   orx_wasi_fstat(f, b)
 #define access(p, m)  orx_wasi_access(p, m)
 #define chmod(p, m)   orx_wasi_chmod(p, m)
-/* rename: Endive's own path_rename (endive#276) */
+#define rename(f, t)  orx_wasi_rename(f, t)
 #define utimes(p, t)  orx_wasi_utimes(p, t)
 #define utime(p, t)   orx_wasi_utime(p, t)
 #define chdir(p)      orx_wasi_chdir(p)

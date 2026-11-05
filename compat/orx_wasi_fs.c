@@ -12,8 +12,8 @@
  *   - access: WASI checks the capability rights of the preopened directory,
  *     not the file's permissions (every existing file was writable).
  *   - chmod: there is no chmod in WASI (setReadOnly did nothing).
- *   - rename: Chicory 1.7.5's path_rename asks Files.move for COPY_ATTRIBUTES,
- *     which the JDK refuses for a move: every rename failed with ENOTSUP.
+ *   - rename: only the empty path (Chicory 1.7.5's path_rename asked Files.move
+ *     for COPY_ATTRIBUTES, every rename failed; Endive's, since endive#276, works).
  *   - chdir: wasi-libc keeps the current directory as the string it was
  *     given, joined to the old one ("cd x/.." left "/d/x/.."): it is set to
  *     the host's real path instead, as a POSIX getcwd() returns it.
@@ -30,6 +30,7 @@
  */
 
 #include <errno.h>
+#include <stdio.h>
 #include <fcntl.h>
 #include <limits.h>
 #include <stdint.h>
@@ -230,14 +231,15 @@ int orx_wasi_chmod(const char *p, mode_t mode)
 
 int orx_wasi_rename(const char *from, const char *to)
 {
-    char b1[PATH_MAX], b2[PATH_MAX];
-    const char *f = rxj_path(from, b1, sizeof(b1));
-    if (f == NULL)
+    // Endive's own path_rename since endive#276 (Chicory 1.7.5's asked Files.move for
+    // COPY_ATTRIBUTES: every rename failed); only the empty path stays ours: wasi-libc
+    // makes it ".", so rename("", "") succeeded
+    if (*from == '\0' || *to == '\0')
     {
+        errno = ENOENT;
         return -1;
     }
-    const char *t = rxj_path(to, b2, sizeof(b2));
-    return t == NULL ? -1 : rxj_result(rxj_file_rename(f, t));
+    return rename(from, to);
 }
 
 /* flags: 1 set the access time, 2 set the modification time */
