@@ -3,10 +3,10 @@
   <groupId>rexxjvm</groupId><artifactId>rexxjvm</artifactId><version>0.1</version>
   <properties>
     <maven.compiler.release>11</maven.compiler.release>
-    <endive.version>1.2.0</endive.version>
+    <endive.version>999-SNAPSHOT</endive.version>
     <!-- Endive's compiler with its call_indirect dispatch in smaller methods, installed in the
          local Maven repository by scripts/endive-compiler.sh (host/chicory-patch/README.md) -->
-    <endive.compiler.version>1.2.0-orx1</endive.compiler.version>
+    <endive.compiler.version>999-SNAPSHOT</endive.compiler.version>
     <!-- true: leave Endive's call_indirect dispatch as it is (static-table/README.md) -->
     <static.table.skip>false</static.table.skip>
     <project.build.sourceEncoding>UTF-8</project.build.sourceEncoding>
