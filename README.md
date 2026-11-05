@@ -273,7 +273,10 @@ server, detached (`$TMPDIR/.ooRexx-jvm-USER-server-KEY`, one per user and
 build, its output in `….log`); it ends after 15 minutes with nothing running
 (`-Drexxjvm.server.idle`, seconds, in `REXXJ_JAVA_OPTIONS`). When it cannot do
 that (no server can start, a standard stream that is closed, or a socket
-unless relayed), `rexxjs` runs `rexxj` as usual.
+unless relayed), `rexxjs` runs `rexxj` as usual. The server needs Java 16 or
+later (Unix domain sockets); on Java 11 to 15 it ends at once, and `rexxjs`,
+which watches the server it started (a pipe on Unix, its process on Windows),
+runs `rexxj` without waiting for a socket that will not come.
 
 ```bash
 export REXXJ_SERVER=1

@@ -285,8 +285,10 @@ static int frame(unsigned char type, int32_t id, const void *p, int32_t n) {
 
 /* ---- the server ---- */
 
-/* Starts the server, detached, its output to SOCKET.log. */
-static void start_server(const char *path) {
+/* Starts the server, detached, its output to SOCKET.log. Returns its process, so that the
+   client stops waiting for its socket if it ends (it cannot run: Java before 16, a bad
+   option...); NULL if it could not be started. */
+static HANDLE start_server(const char *path) {
     wchar_t *wpath = wide(path);
     wbuf log = { 0 };
     wputs(&log, wpath);
@@ -295,7 +297,7 @@ static void start_server(const char *path) {
     HANDLE out = CreateFileW(log.p, GENERIC_WRITE, FILE_SHARE_READ | FILE_SHARE_WRITE | FILE_SHARE_DELETE,
                              &sa, CREATE_ALWAYS, FILE_ATTRIBUTE_NORMAL, NULL);
     HANDLE null = CreateFileW(L"NUL", GENERIC_READ, FILE_SHARE_READ | FILE_SHARE_WRITE, &sa, OPEN_EXISTING, 0, NULL);
-    if (out == INVALID_HANDLE_VALUE || null == INVALID_HANDLE_VALUE) return;
+    if (out == INVALID_HANDLE_VALUE || null == INVALID_HANDLE_VALUE) return NULL;
 
     wbuf cl = { 0 };
     wputs(&cl, L"java -Xss16m ");
@@ -315,7 +317,7 @@ static void start_server(const char *path) {
     InitializeProcThreadAttributeList(NULL, 1, 0, &size);
     LPPROC_THREAD_ATTRIBUTE_LIST attrs = xmalloc(size);
     if (!InitializeProcThreadAttributeList(attrs, 1, 0, &size)
-        || !UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, list, sizeof list, NULL, NULL)) return;
+        || !UpdateProcThreadAttribute(attrs, 0, PROC_THREAD_ATTRIBUTE_HANDLE_LIST, list, sizeof list, NULL, NULL)) return NULL;
     STARTUPINFOEXW si;
     memset(&si, 0, sizeof si);
     si.StartupInfo.cb = sizeof si;
@@ -334,13 +336,11 @@ static void start_server(const char *path) {
     BOOL ok = CreateProcessW(NULL, cl.p, NULL, NULL, TRUE, flags | CREATE_BREAKAWAY_FROM_JOB, NULL,
                              tn ? tmp : NULL, &si.StartupInfo, &pi)
            || CreateProcessW(NULL, cl.p, NULL, NULL, TRUE, flags, NULL, tn ? tmp : NULL, &si.StartupInfo, &pi);
-    if (ok) {
-        CloseHandle(pi.hThread);
-        CloseHandle(pi.hProcess);
-    }
+    if (ok) CloseHandle(pi.hThread);
     DeleteProcThreadAttributeList(attrs);
     CloseHandle(out);
     CloseHandle(null);
+    return ok ? pi.hProcess : NULL;
 }
 
 /* ---- Ctrl+C and the rest: sent on to the program ---- */
@@ -775,11 +775,18 @@ int wmain(int argc, wchar_t **wargv) {
         SOCKET probe = socket(AF_UNIX, SOCK_STREAM, 0);
         if (probe == INVALID_SOCKET) fallback();
         closesocket(probe);
-        start_server(path);
+        HANDLE server = start_server(path);
         for (int i = 0; i < 600 && sock == INVALID_SOCKET; i++) {       /* up to 30 s */
-            Sleep(50);
+            if (server && WaitForSingleObject(server, 50) == WAIT_OBJECT_0) {
+                /* the server we started has ended: another one may serve the socket
+                   (ours found it taken), so one last try, then rexxj */
+                sock = connect_to(path);
+                break;
+            }
+            if (!server) Sleep(50);
             sock = connect_to(path);
         }
+        if (server) CloseHandle(server);
         if (sock == INVALID_SOCKET) fallback();
     }
 

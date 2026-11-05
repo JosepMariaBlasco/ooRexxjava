@@ -132,13 +132,26 @@ static int connect_to(const char *path) {
     return s;
 }
 
-/* Starts the server, detached, in a session of its own, its output to SOCKET.log. */
-static void start_server(const char *path) {
+/* Starts the server, detached, in a session of its own, its output to SOCKET.log.
+   Returns the read end of a pipe whose write end the server holds for as long as it
+   lives: end of file there means it has gone (it cannot run: Java before 16, a bad
+   option...), so the client stops waiting for its socket. -1 if there is none. */
+static int start_server(const char *path) {
+    int alive[2];
+    if (pipe_cloexec(alive) < 0) alive[0] = alive[1] = -1;
     pid_t p = fork();
-    if (p < 0) return;
-    if (p > 0) return;
+    if (p < 0) {
+        if (alive[0] >= 0) { close(alive[0]); close(alive[1]); }
+        return -1;
+    }
+    if (p > 0) {
+        if (alive[1] >= 0) close(alive[1]);
+        return alive[0];
+    }
     setsid();
     if (fork() > 0) _exit(0);              /* not a child of the client: no zombie */
+    if (alive[0] >= 0) close(alive[0]);
+    if (alive[1] >= 0) fcntl(alive[1], F_SETFD, 0);     /* kept by the server, through exec */
     char log[PATH_MAX + 8];
     snprintf(log, sizeof log, "%s.log", path);
     int null = open("/dev/null", O_RDONLY);
@@ -606,12 +619,24 @@ int main(int argc, char **argv) {
         return 0;
     }
     if (s < 0) {
-        start_server(path);
+        int alive = start_server(path);
         struct timespec ts = { 0, 50 * 1000 * 1000 };
         for (int i = 0; i < 600 && s < 0; i++) {       /* up to 30 s */
-            nanosleep(&ts, NULL);
+            if (alive >= 0) {
+                struct pollfd pf = { alive, POLLIN, 0 };
+                char c;
+                if (poll(&pf, 1, 50) > 0 && read(alive, &c, 1) == 0) {
+                    /* the server we started has gone: another one may serve the socket
+                       (ours found it taken), so one last try, then rexxj */
+                    s = connect_to(path);
+                    break;
+                }
+            } else {
+                nanosleep(&ts, NULL);
+            }
             s = connect_to(path);
         }
+        if (alive >= 0) close(alive);
         if (s < 0) fallback(argv);
     }
 
