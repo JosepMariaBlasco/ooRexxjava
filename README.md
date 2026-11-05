@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13358 (the
-ooRexx family's revision since 03/11/2026; r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13381 (since
+05/11/2026; r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -61,7 +61,11 @@ tool of `dist-test`'s `rexx.wasm`) pass without the warm JVM
 r1131 and commands looked up in their own `PATH` (the warm JVM had looked them
 up in its own, that of whoever started it: hence `rxsubcom`), through the warm
 JVM (`suite-jvm-r13358-bsf1131-server.csv`, 03/11/2026): **405 of 405** in
-4 min 4 s, 24,440 tests, 0 failures, 0 errors.
+4 min 4 s, 24,440 tests, 0 failures, 0 errors. On ooRexx r13381 with test/trunk
+r13381 (05/11/2026, through the warm JVM, `suite-jvm-r13381-server.csv`):
+**406 of 406** in 4 min, 24,469 tests, 0 failures, 0 errors (the new group is
+`BuiltinArgumentErrors`: since r13363, #2136, built-in functions raise their
+own 40.xxx errors where they raised the String methods' 93.xxx).
 
 That count includes, as passed with no tests, the groups the suite restricts
 to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
@@ -92,7 +96,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13358 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13381 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at
