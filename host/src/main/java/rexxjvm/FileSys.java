@@ -116,12 +116,36 @@ final class FileSys {
                 f[F_CTIME] = nanos((FileTime) u.get("ctime"));
             } else {
                 f[F_MODE] = posixMode(p, lo, b);
+                f[F_INO] = inode(p, b);
             }
         } catch (IOException | RuntimeException x) {
             return error(x);
         }
         for (int i = 0; i < F_COUNT; i++) m.writeLong(out + 8 * i, f[i]);
         return 0;
+    }
+
+    /**
+     * An inode where the file system has no "unix" view (Windows): the file key if it is
+     * a number, else a 64-bit FNV-1a hash of the real path, never 0 (as Endive's
+     * inodeFromPath, endive#282): 0 for every file made them all the same file.
+     */
+    static long inode(Path p, BasicFileAttributes b) {
+        Object k = b.fileKey();
+        if (k instanceof Number && ((Number) k).longValue() != 0) return ((Number) k).longValue();
+        String s;
+        try {
+            s = p.toRealPath().toString();
+        } catch (IOException | RuntimeException x) {
+            s = p.toAbsolutePath().normalize().toString();
+        }
+        long h = 0xcbf29ce484222325L;
+        for (int i = 0; i < s.length(); i++) {
+            h ^= s.charAt(i);
+            h *= 0x100000001b3L;
+        }
+        h &= Long.MAX_VALUE;
+        return h == 0 ? 1 : h;
     }
 
     private static Map<String, Object> unix(Path p, LinkOption[] lo) throws IOException {
