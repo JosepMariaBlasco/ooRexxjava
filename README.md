@@ -276,7 +276,11 @@ that (no server can start, a standard stream that is closed, or a socket
 unless relayed), `rexxjs` runs `rexxj` as usual. The server needs Java 16 or
 later (Unix domain sockets); on Java 11 to 15 it ends at once, and `rexxjs`,
 which watches the server it started (a pipe on Unix, its process on Windows),
-runs `rexxj` without waiting for a socket that will not come.
+runs `rexxj` without waiting for a socket that will not come. The suite on Java 11 (one JVM per
+group, 25 min): 398/405; the seven that fail share the API server between
+processes (`ProcessInvocation`, `ProcessRexxStart`, `RexxQueue`, `rxQueue`,
+`rxsubcom`, `Macrospace`), and `TRACE_TraceObject`, timing
+(`results/suite-jvm-r13358-java11.csv`).
 
 ```bash
 export REXXJ_SERVER=1
