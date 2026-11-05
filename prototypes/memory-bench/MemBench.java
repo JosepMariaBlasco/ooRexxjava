@@ -155,8 +155,8 @@ public final class MemBench {
     static void program(Memory m) {
         int[][] p = {
             { LI, 1, 0, 0 },            // 0: r1 = i = 0
-            { LI, 2, N >> 8, 8 },       // 1: r2 = N   (b << c)
-            { LI, 3, DATA >> 12, 12 },  // 2: r3 = DATA
+            { LI, 2, 128, 9 },          // 1: r2 = N = 128 << 9   (b << c; b and c are bytes)
+            { LI, 3, 128, 13 },         // 2: r3 = DATA = 128 << 13
             { LI, 7, 0, 0 },            // 3: r7 = acc
             { SHL, 4, 1, 2 },           // 4: r4 = i << 2
             { ADD, 4, 4, 3 },           // 5: r4 = DATA + 4i
@@ -175,7 +175,10 @@ public final class MemBench {
             { HALT, 0, 0, 0 },          // 18
         };
         for (int i = 0; i < p.length; i++)
-            for (int k = 0; k < 4; k++) m.writeByte(CODE + 4 * i + k, (byte) p[i][k]);
+            for (int k = 0; k < 4; k++) {
+                if (p[i][k] >>> 8 != 0) throw new IllegalStateException("instruction " + i + ": " + p[i][k] + " is not a byte");
+                m.writeByte(CODE + 4 * i + k, (byte) p[i][k]);
+            }
         m.writeI32(REGS + 4 * 9, 0x9E3779B1);
         m.writeI32(REGS + 4 * 10, 16);
         m.writeI32(REGS + 4 * 12, 0x7F);
@@ -225,7 +228,12 @@ public final class MemBench {
                  : kind.equals("arena") ? SegmentFlat.arena()
                  : null;
         if (m == null) throw new IllegalArgumentException("kind: unsafe, mapped or arena");
-        if (work.equals("vm")) program(m);
+        if (work.equals("vm")) {
+            program(m);
+            // 4 instructions to set up, 14 per element, the HALT: the whole array walked
+            long n = vm(m), expected = 4 + 14L * N + 1;
+            if (n != expected) throw new IllegalStateException("vm ran " + n + " instructions, not " + expected);
+        }
         double[] rates = new double[seconds];
         for (int s = -3; s < seconds; s++) {            // 3 s of warm-up
             long ops = 0, t0 = System.nanoTime(), t;
