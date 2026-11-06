@@ -358,6 +358,16 @@ a file whose attributes it does not expect. `TRACE` and `SysSleep` are timing
 before commands got drives' paths in Windows' form, `HOME` and `TMPDIR`, and the
 test tools' `.cmd`.
 
+On ooRexx r13389 with test/trunk r13388 (06/11/2026, through the warm JVM,
+`results/suite-jvm-r13389-windows-java25-server.csv`): **394 of 406**, 24,515
+tests, 31 failures, 2 errors. The same ten groups as above fail (`TRACE` now
+passes; `OPTIONS` has an error instead of a failure), and two more, again the
+Windows host: `SysUnix`, which runs under WASI since test/trunk r13382, fails
+the services (`SysGetServByName`/`Port`: no services database) and six
+`SysStat` tests on `/dev/null`; `rexx_command`'s two tests of #1317
+(test/trunk r13370) skip on `WINDOWS`, but here the OS is WASI and `cmd.exe`
+cannot pass a command line of 20,000 characters.
+
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
 three functions that need it on Windows (reported: bytecodealliance/endive#280;
