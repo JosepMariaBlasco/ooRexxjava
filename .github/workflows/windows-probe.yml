@@ -1,0 +1,68 @@
+# Measurements on Windows, not checks: runs a Rexx program of this repository
+# with rexxj and prints what it says, plus what the JVM sees of its host
+# (os.name, os.version...). Dispatched by hand. Builds rexxj.jar as windows.yml
+# does, over the saved build's rexx.wasm.
+name: windows-probe
+on:
+  workflow_dispatch:
+    inputs:
+      script:
+        description: Rexx program to run (a path in this repository)
+        default: tests/probe/rexxutil.rex
+      java:
+        description: Java version
+        default: '25'
+jobs:
+  jar:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The saved build's dist
+        run: |
+          git fetch -q --depth 1 origin saved-build
+          mkdir -p "$RUNNER_TEMP/saved" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/saved"
+          tar -xzf "$RUNNER_TEMP/saved/oorexxjava-dist.tar.gz" dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: 25
+          cache: maven
+      - name: rexxj.jar
+        run: |
+          scripts/endive-compiler.sh
+          (cd host && mvn -q -B clean package -DskipTests -Pembedded -Dwasm.file="$GITHUB_WORKSPACE/dist/rexx.wasm")
+          cp host/target/rexxj.jar dist/
+          cp launchers/windows/*.cmd dist/
+      - uses: actions/upload-artifact@v4
+        with:
+          name: dist
+          path: dist
+          retention-days: 1
+  probe:
+    needs: jar
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ inputs.java }}
+      - uses: actions/download-artifact@v4
+        with:
+          name: dist
+          path: dist
+      - name: What the JVM sees
+        shell: pwsh
+        run: |
+          java -XshowSettings:properties -version 2>&1 |
+            Select-String -Pattern '^\s*(os\.|java\.version|java\.vendor |java\.vm\.name|user\.name|user\.timezone|file\.separator|java\.io\.tmpdir|native\.encoding|sun\.jnu\.encoding)'
+          "TZ: " + (Get-TimeZone).Id + ", now " + (Get-Date -Format "yyyy-MM-dd HH:mm:ss")
+          "whoami: " + (whoami)
+      - name: The program, with rexxj
+        shell: pwsh
+        env:
+          SCRIPT: ${{ inputs.script }}
+        run: |
+          $d = (Resolve-Path dist).Path
+          & "$d\rexx.cmd" $env:SCRIPT 2>&1
+          "(exit $LASTEXITCODE)"
