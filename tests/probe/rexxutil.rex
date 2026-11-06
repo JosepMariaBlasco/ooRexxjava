@@ -59,7 +59,26 @@ call t 'SysCreateMutexSem("")<>""'
 call t 'SysCls()', 'skip'
 call t 'SysGetKey()', 'skip'
 
-/* --- rxunixsys --- */
+/* --- RexxUtil, Windows only --- */
+call t 'SysWinVer()'
+call t 'SysBootDrive()'
+call t 'SysSystemDirectory()'
+call t 'SysDriveMap()'
+call t 'SysDriveInfo("C:")'
+call t 'SysFileSystemType("C:")'
+call t 'SysVolumeLabel("C:")'
+call t 'SysTextScreenSize()'
+call t 'SysGetLongPathName(f)<>""'
+call t 'SysGetShortPathName(f)<>""'
+call t 'SysIsFileCompressed(f)'
+call t 'SysIsFileTemporary(f)'
+call t 'SysWinGetDefaultPrinter()<>""'
+call t 'SysToUnicode("abc", "UTF8", , "U.")'
+call t 'SysCurPos()', 'skip'
+
+/* --- rxunixsys (loaded at run time: absent natively on Windows) --- */
+.local~probe.unix = .context~package~loadLibrary('rxunixsys')
+call out 'loadLibrary("rxunixsys")', .local~probe.unix
 call t 'SysUname("S")'
 call t 'SysUname("N")'
 call t 'SysUname("R")'
@@ -145,10 +164,10 @@ t: procedure expose f dir S. R. ST. SN. DL. W. XA.
   if skip <> '' then do; call out expr, '(not run)'; return; end
   signal on syntax name err
   interpret 'r = ' expr
-  call out expr, r '| errno' SysGeterrno()
+  if .local~probe.unix == .true then r = r '| errno' SysGeterrno()
+  call out expr, r
   return
 err:
   call out expr, 'SYNTAX' condition('o')~code':' condition('o')~message
   return
 
-::requires 'rxunixsys' LIBRARY

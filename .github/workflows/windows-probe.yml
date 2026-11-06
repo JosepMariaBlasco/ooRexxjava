@@ -12,6 +12,9 @@ on:
       java:
         description: Java version
         default: '25'
+      native:
+        description: Native ooRexx installer to run it with too (a file of SourceForge's oorexx/5.3.0beta, or empty)
+        default: oorexx-5.3.0-13396.windows.x86_64.exe
 jobs:
   jar:
     runs-on: ubuntu-latest
@@ -65,4 +68,20 @@ jobs:
         run: |
           $d = (Resolve-Path dist).Path
           & "$d\rexx.cmd" $env:SCRIPT 2>&1
+          "(exit $LASTEXITCODE)"
+      - name: The program, with native ooRexx
+        if: inputs.native != ''
+        shell: pwsh
+        env:
+          SCRIPT: ${{ inputs.script }}
+          NATIVE: ${{ inputs.native }}
+        run: |
+          $exe = "$env:RUNNER_TEMP\oorexx-setup.exe"
+          curl.exe -sSLf -o $exe "https://downloads.sourceforge.net/project/oorexx/oorexx/5.3.0beta/$env:NATIVE"
+          Start-Process -FilePath $exe -ArgumentList "/S" -Wait
+          $dir = "$env:ProgramFiles\ooRexx"
+          if (-not (Test-Path "$dir\rexx.exe")) { "::error::rexx.exe not in $dir"; Get-ChildItem $env:ProgramFiles; exit 1 }
+          $env:PATH = "$dir;$env:PATH"
+          & "$dir\rexx.exe" -v 2>&1 | Select-Object -First 1
+          & "$dir\rexx.exe" $env:SCRIPT 2>&1
           "(exit $LASTEXITCODE)"
