@@ -12,7 +12,7 @@ on:
         description: Endive repository
         default: bytecodealliance/endive
       ref:
-        description: Branch or commit
+        description: Branch, tag or full commit hash
         default: main
 jobs:
   jar:
@@ -37,7 +37,10 @@ jobs:
           cp launchers/windows/*.cmd dist/
       - name: Endive's wasi from ${{ inputs.repo }} at ${{ inputs.ref }}, into rexxj.jar
         run: |
-          git clone -q --depth 1 -b "${{ inputs.ref }}" "https://github.com/${{ inputs.repo }}" "$RUNNER_TEMP/endive"
+          # a branch, a tag or a full commit hash (clone -b takes no commit)
+          git init -q "$RUNNER_TEMP/endive"
+          git -C "$RUNNER_TEMP/endive" fetch -q --depth 1 "https://github.com/${{ inputs.repo }}" "${{ inputs.ref }}"
+          git -C "$RUNNER_TEMP/endive" checkout -q FETCH_HEAD
           (cd "$RUNNER_TEMP/endive" && mvn -q -B -Dquickly install -pl wasi -am)
           C="$RUNNER_TEMP/endive/wasi/target/classes"
           # the whole wasi module, not only WasiPreview1: its other classes change too
