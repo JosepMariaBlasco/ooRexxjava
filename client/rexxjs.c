@@ -645,10 +645,22 @@ int main(int argc, char **argv) {
     snprintf(jar, sizeof jar, "%s/rexxj.jar", dir);
     struct stat js;
     if (stat(jar, &js) < 0) fallback(argv);
-    /* TMPDIR, if we may create files in it (else /tmp: as native rxapi skips an
-       XDG_RUNTIME_DIR it cannot write to, #2135; a server could not make its lock) */
+    /* TMPDIR, if we may create files in it (as native rxapi skips an XDG_RUNTIME_DIR
+       it cannot write to, #2135: a server could not make its lock); else the system's
+       temporary directory, as the JVM takes it for java.io.tmpdir: on macOS the
+       user's own (confstr), elsewhere the C library's (P_tmpdir, /tmp in glibc) */
     const char *tmp = getenv("TMPDIR");
-    if (!tmp || !*tmp || access(tmp, W_OK | X_OK) != 0) tmp = "/tmp";
+    if (!tmp || !*tmp || access(tmp, W_OK | X_OK) != 0) {
+        tmp = P_tmpdir;
+#ifdef __APPLE__
+        static char user_tmp[PATH_MAX];
+        size_t n = confstr(_CS_DARWIN_USER_TEMP_DIR, user_tmp, sizeof user_tmp);
+        if (n > 0 && n <= sizeof user_tmp) {
+            if (n > 2 && user_tmp[n - 2] == '/') user_tmp[n - 2] = 0;   /* no trailing '/' */
+            tmp = user_tmp;
+        }
+#endif
+    }
     struct passwd *pw = getpwuid(getuid());
     char user[64];
     snprintf(user, sizeof user, "%s", pw ? pw->pw_name : "user");
