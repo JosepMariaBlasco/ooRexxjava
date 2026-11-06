@@ -371,7 +371,9 @@ Windows host: `SysUnix`, which runs under WASI since test/trunk r13382, fails
 the services (`SysGetServByName`/`Port`: no services database) and six
 `SysStat` tests on `/dev/null`; `rexx_command`'s two tests of #1317
 (test/trunk r13370) skip on `WINDOWS`, but here the OS is WASI and `cmd.exe`
-cannot pass a command line of 20,000 characters.
+cannot pass a command line of 20,000 characters. On ooRexx r13398 with
+test/trunk r13397 (`results/suite-jvm-r13398-windows-java25-server.csv`): the
+same 394 of 406, the same failures, 24,524 tests (the new ones pass).
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
