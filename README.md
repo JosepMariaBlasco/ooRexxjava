@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13381 (since
-05/11/2026; r13358 from 03/11/2026 and r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13389 (since
+06/11/2026; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -66,12 +66,19 @@ r13381 (05/11/2026, through the warm JVM, `suite-jvm-r13381-server.csv`):
 **406 of 406** in 4 min, 24,469 tests, 0 failures, 0 errors (the new group is
 `BuiltinArgumentErrors`: since r13363, #2136, built-in functions raise their
 own 40.xxx errors where they raised the String methods' 93.xxx).
+On ooRexx r13389 with test/trunk r13388 (06/11/2026, through the warm JVM,
+`suite-jvm-r13389-server.csv`): **406 of 406** in 3 min 16 s, 24,515 tests,
+0 failures, 0 errors.
 
-That count includes, as passed with no tests, the groups the suite restricts
-to Unix (`SysUnix`, `tilde`, `SysGetMessage`, `ncurses`, `utilities/rxapi`):
-its framework does not know the OS "WASI" and skips them.
-`scripts/suite-with-wasi.sh` makes a copy of the suite whose framework knows
-it; there **396 of 405** pass (`suite-jvm-r13346-sockets-wasi-os.csv`):
+Up to test/trunk r13381 that count included, as passed with no tests, the
+groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
+`ncurses`, `utilities/rxapi`): its framework did not know the OS "WASI" and
+skipped them. Since test/trunk r13382 it knows it (RFE #879), and since
+r13386 those groups skip by name only the tests that cannot pass under WASI:
+on r13388 they run 45 tests and pass (`SysUnix` 30, `SysGetMessage` 11,
+`utilities/rxapi` 3, `tilde` 1; `ncurses` is skipped as a whole). Before,
+a copy of the suite whose framework knew WASI (`scripts/suite-with-wasi.sh`,
+dropped on r13389) gave **396 of 405** (`suite-jvm-r13346-sockets-wasi-os.csv`):
 `tilde` passes; `SysUnix` fails `crypt`'s `$3$` and six `SysStat` of the
 native rxapi's socket (ours is named differently); there are no message
 catalogs (`SysGetMessage`), no ncurses, and `utilities/rxapi` tests the
@@ -96,7 +103,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13381 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13389 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at
