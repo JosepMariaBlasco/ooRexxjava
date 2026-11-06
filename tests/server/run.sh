@@ -12,7 +12,8 @@
 #   while a command runs (halt-cmd.rex);
 # - a client whose streams the server cannot open through /proc (another user's pipes:
 #   sudo -u from a root shell) is relayed instead, and its commands too; only as root,
-#   with REXXJ_TEST_USER (default claude) able to read DIST;
+#   with REXXJ_TEST_USER (default claude) able to read DIST; and one whose TMPDIR it
+#   may not write to uses /tmp, with nothing on its standard error (#2135's case);
 # - rexxjs --orx-server-stop ends the server and its programs (143); the next run
 #   starts a new one.
 # REXXJ_SERVER_RELAY=1 tests/server/run.sh runs it all with the streams relayed through
@@ -64,6 +65,11 @@ if [ "$(id -u)" = 0 ] && id "$U" >/dev/null 2>&1; then
   echo abc | sudo -u "$U" env -u JAVA_TOOL_OPTIONS HOME=/tmp REXXJ_SERVER=1 "$D/rexx" "$T/other.rex" 2>&1 | cat > "$T/other.txt"
   rc=${PIPESTATUS[1]}
   check "another user's pipes: relayed" "got abc|cmd| 3" "$(tr '\n' '|' < "$T/other.txt") $rc"
+  # an unwritable TMPDIR (#2135's case for rxapi): /tmp instead, and nothing on stderr
+  mkdir "$T/ro" && chmod 555 "$T/ro"
+  printf 'say 1\n' > "$T/one.rex"; chmod o+r "$T/one.rex"
+  got=$(sudo -u "$U" env -u JAVA_TOOL_OPTIONS HOME=/tmp REXXJ_SERVER=1 TMPDIR="$T/ro" "$D/rexx" "$T/one.rex" 2>&1)
+  check "an unwritable TMPDIR: /tmp, quietly" "1" "$got"
   sudo -u "$U" "$D/rexxjs" --orx-server-stop 2>/dev/null
 else
   echo "skip another user's pipes (not root, or no user $U)"

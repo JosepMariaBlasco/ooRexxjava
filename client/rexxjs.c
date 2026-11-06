@@ -157,6 +157,7 @@ static int start_server(const char *path) {
     int null = open("/dev/null", O_RDONLY);
     int out = open(log, O_WRONLY | O_CREAT | O_TRUNC, 0600);
     if (null >= 0) dup2(null, 0);
+    if (out < 0) out = open("/dev/null", O_WRONLY);   /* never the client's terminal */
     if (out >= 0) { dup2(out, 1); dup2(out, 2); }
     if (chdir("/") < 0) { /* stay where we are */ }
 
@@ -644,8 +645,10 @@ int main(int argc, char **argv) {
     snprintf(jar, sizeof jar, "%s/rexxj.jar", dir);
     struct stat js;
     if (stat(jar, &js) < 0) fallback(argv);
+    /* TMPDIR, if we may create files in it (else /tmp: as native rxapi skips an
+       XDG_RUNTIME_DIR it cannot write to, #2135; a server could not make its lock) */
     const char *tmp = getenv("TMPDIR");
-    if (!tmp || !*tmp) tmp = "/tmp";
+    if (!tmp || !*tmp || access(tmp, W_OK | X_OK) != 0) tmp = "/tmp";
     struct passwd *pw = getpwuid(getuid());
     char user[64];
     snprintf(user, sizeof user, "%s", pw ? pw->pw_name : "user");
