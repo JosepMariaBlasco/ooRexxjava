@@ -27,7 +27,7 @@ if [ "$(cat BSF4ooRexx/.svn-rev 2>/dev/null)" != "$BSF_REV" ]; then
 fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
-  svn export -q -r 13381 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
+  svn export -q -r 13389 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
   (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-generic-layer.patch \
                  && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
   mv oorexx.tmp oorexx

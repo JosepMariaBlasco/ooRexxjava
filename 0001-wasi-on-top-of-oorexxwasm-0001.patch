@@ -204,20 +204,6 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SystemInterpreter.cpp oorexx/inte
  }
  
  
-diff -ruN oorexx.ref/interpreter/streamLibrary/StreamNative.cpp oorexx/interpreter/streamLibrary/StreamNative.cpp
---- oorexx.ref/interpreter/streamLibrary/StreamNative.cpp
-+++ oorexx/interpreter/streamLibrary/StreamNative.cpp
-@@ -2444,7 +2444,9 @@
-     }
-     /* if write only specified           */
-     /*      - try both first             */
--    if (oflag & RX_O_WRONLY)
-+    // the access modes are values, not bits: under WASI, O_RDWR is
-+    // O_RDONLY | O_WRONLY, and "oflag & RX_O_WRONLY" was true for BOTH
-+    if ((oflag & (RX_O_RDONLY | RX_O_WRONLY | RX_O_RDWR)) == RX_O_WRONLY)
-     {
-         /* set both flags                    */
-         read_write = true;
 diff -ruN oorexx.ref/rexxapi/client/LocalAPIManager.cpp oorexx/rexxapi/client/LocalAPIManager.cpp
 --- oorexx.ref/rexxapi/client/LocalAPIManager.cpp
 +++ oorexx/rexxapi/client/LocalAPIManager.cpp
