@@ -35,7 +35,7 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
 +              PROPERTIES COMPILE_OPTIONS "-include;orx_wasi_net.h")
    endif ()
    set_source_files_properties(${wasm_embedded_package_sources}
-               PROPERTIES COMPILE_DEFINITIONS ORX_EMBEDDED_PACKAGE)
+               PROPERTIES COMPILE_DEFINITIONS OOREXX_EMBEDDED_PACKAGE)
 diff -ruN oorexx.ref/common/platform/unix/SysFile.cpp oorexx/common/platform/unix/SysFile.cpp
 --- oorexx.ref/common/platform/unix/SysFile.cpp
 +++ oorexx/common/platform/unix/SysFile.cpp

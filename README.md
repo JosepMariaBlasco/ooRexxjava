@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13389 (since
-06/11/2026; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13398 (since
+06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -68,7 +68,12 @@ r13381 (05/11/2026, through the warm JVM, `suite-jvm-r13381-server.csv`):
 own 40.xxx errors where they raised the String methods' 93.xxx).
 On ooRexx r13389 with test/trunk r13388 (06/11/2026, through the warm JVM,
 `suite-jvm-r13389-server.csv`): **406 of 406** in 3 min 16 s, 24,515 tests,
-0 failures, 0 errors.
+0 failures, 0 errors. On ooRexx r13398 with test/trunk r13397 (06/11/2026,
+`suite-jvm-r13398-server.csv`): 405 of 406 in 3 min 16 s, 24,524 tests; the
+one group that failed, `ProcessInvocation` (`testContextHaltExit`,
+`testContextIOExitDebug`), took 18 s there instead of 8 and passes alone
+(three runs out of three) and in a second full run: load-sensitive, as the
+timing groups.
 
 Up to test/trunk r13381 that count included, as passed with no tests, the
 groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
@@ -103,7 +108,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13389 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13398 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at

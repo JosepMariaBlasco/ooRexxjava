@@ -29,7 +29,7 @@ on:
         default: '25'
       test_rev:
         description: test/trunk revision
-        default: '13388'
+        default: '13397'
       server:
         description: Through the warm JVM (rexxjs.exe), as on Linux
         default: 'true'

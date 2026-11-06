@@ -9,7 +9,7 @@ mkdir -p "$WORK" && cd "$WORK"
 W=$WORK/wasi-sdk-34.0-x86_64-linux
 # oorexxwasm's generic WebAssembly layer (its 0001, the only patch a WASI build applies),
 # from a fixed commit (its HEAD moves with the family's revision)
-OOREXXWASM_REV=908aecd752569fcd1114b01b855f3eaaa5bb2cdb
+OOREXXWASM_REV=fc3c07feb790412a121383e778dbc12802c5644e
 if [ "$(git -C oorexxwasm rev-parse HEAD 2>/dev/null)" != "$OOREXXWASM_REV" ]; then
   rm -rf oorexxwasm && git init -q oorexxwasm
   git -C oorexxwasm fetch -q --depth 1 https://github.com/JosepMariaBlasco/oorexxwasm "$OOREXXWASM_REV"
@@ -27,7 +27,7 @@ if [ "$(cat BSF4ooRexx/.svn-rev 2>/dev/null)" != "$BSF_REV" ]; then
 fi
 # the patches only on a fresh export: applying them again to a patched tree breaks it
 if [ ! -d oorexx ]; then
-  svn export -q -r 13389 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
+  svn export -q -r 13398 https://svn.code.sf.net/p/oorexx/code-0/main/trunk oorexx.tmp
   (cd oorexx.tmp && patch -p1 -s < ../oorexxwasm/patches/0001-wasm-generic-layer.patch \
                  && patch -p1 -s < "$HERE/0001-wasi-on-top-of-oorexxwasm-0001.patch")
   mv oorexx.tmp oorexx
