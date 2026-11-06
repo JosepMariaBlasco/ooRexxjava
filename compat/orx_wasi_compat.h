@@ -38,7 +38,8 @@ static inline int chown(const char *f, uid_t u, gid_t g) { (void)f; (void)u; (vo
 static inline int lchown(const char *f, uid_t u, gid_t g) { (void)f; (void)u; (void)g; errno = ENOSYS; return -1; }
 static inline int chroot(const char *d) { (void)d; errno = ENOSYS; return -1; }
 /* orx_wasi_stubs.c: umask only remembered (no permission bits are applied at
-   creation); no time zones, times are UTC (tzname "UTC") */
+   creation); tzset and tzname over the launcher's time zone, as localtime and
+   mktime (TZ, else the JVM's default zone) */
 mode_t umask(mode_t m);
 void tzset(void);
 extern char *tzname[2];

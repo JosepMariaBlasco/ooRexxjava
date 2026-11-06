@@ -331,6 +331,7 @@ final class Run {
             .addFunction(RxApi.functions().toArray(new HostFunction[0]))
             .addFunction(FileSys.functions().toArray(new HostFunction[0]))
             .addFunction(Net.functions().toArray(new HostFunction[0]))
+            .addFunction(TimeZones.functions().toArray(new HostFunction[0]))
             .addFunction(Rexx.functions(this).toArray(new HostFunction[0]))
             .addFunction(Jni.functions().toArray(new HostFunction[0]))
             .addMemory(new ImportMemory(mi.module(), mi.name(), memory))

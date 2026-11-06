@@ -41,6 +41,14 @@ $out = & $rexx nested.rex 2>$null
 Check "a nested rexx, its exit code -1" "0 42|43|0|-1" ($out -join "|")
 $out = & $rexx (Join-Path $PSScriptRoot "args.rex") "abs" 2>$null
 Check "program by absolute Windows path" "[abs]" ($out -join "|")
+# the local time zone (TimeZones.java): the host's without TZ, else TZ's (as .NET sees them)
+$now = [DateTime]::UtcNow
+$out = & $rexx -e "say time('O') / 3600000000" 2>$null
+Check "local time, the host's zone" ([TimeZoneInfo]::Local.GetUtcOffset($now).TotalHours) ($out -join "|")
+$env:TZ = "America/New_York"
+$out = & $rexx -e "say time('O') / 3600000000" 2>$null
+$env:TZ = $null
+Check "local time, TZ=America/New_York" ([TimeZoneInfo]::FindSystemTimeZoneById("America/New_York").GetUtcOffset($now).TotalHours) ($out -join "|")
 # through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
 # windows.yml as test-ctrlbreak.exe; Java takes Ctrl+Break for a thread dump)
 $cb = Join-Path (Split-Path $rexx) "test-ctrlbreak.exe"

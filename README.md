@@ -23,6 +23,11 @@ data queues, registrations, the macrospace) is shared between processes,
 as natively, through a daemon that is the launcher itself (see *The shared
 API server* below). rxunixsys (`SysStat`, `SysSymlink`...) is embedded; what WASI has no notion of
 (users, sessions, signals, owners) fails as unsupported. rxsock's IPv4 sockets (TCP and UDP) work through the launcher's java.nio.
+Local time (`TIME()`, `DATE()`, the streams' and RexxUtil's file times) is the
+host's: wasi-libc has no time zones, so the launcher gives the zone, read from
+`TZ` as glibc reads it (a tz database name, or a POSIX zone without rules; of one
+with rules, only its standard offset), and the JVM's default zone, the host's,
+when `TZ` is unset (`tests/timezone/run.sh` compares with native rexx).
 SIGINT (Ctrl-C), SIGTERM and SIGHUP raise HALT in the running program, as
 natively; a second one while the program has not yet seen the first HALT (a
 program hung where it never looks, waiting on a semaphore, say) ends the
