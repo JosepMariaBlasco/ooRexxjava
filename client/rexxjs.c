@@ -172,10 +172,13 @@ static int start_server(const char *path) {
     snprintf(cp, sizeof cp, "%s/rexxj.jar", dir);
     av[n++] = "java";
     av[n++] = "-Xss16m";
-    char *opts = getenv("REXXJ_JAVA_OPTIONS");     /* as rexxj: split at blanks */
-    if (opts) {
-        opts = strdup(opts);
-        for (char *t = strtok(opts, " \t"); t && n < 50; t = strtok(NULL, " \t")) av[n++] = t;
+    /* the launcher's options for this java's version (rexxj: Unsafe allowed, the
+       inlining cutoff delayed), then the user's; both split at blanks, as rexxj does */
+    const char *lists[2] = { getenv("REXXJ_JVM_FLAGS"), getenv("REXXJ_JAVA_OPTIONS") };
+    for (int l = 0; l < 2; l++) {
+        if (!lists[l]) continue;
+        char *opts = strdup(lists[l]), *save = NULL;
+        for (char *t = strtok_r(opts, " \t", &save); t && n < 50; t = strtok_r(NULL, " \t", &save)) av[n++] = t;
     }
     av[n++] = exe;
     av[n++] = home;

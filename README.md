@@ -428,7 +428,15 @@ Four things got it there from 0.56 M (02–04/11/2026):
   "Threads and their stacks"), with `sun.misc.Unsafe`. JDK 24 and later warn
   about it on its first use (JEP 498), unless the JVM is started with
   `--sun-misc-unsafe-memory-access=allow`, which the launchers pass on Java 23
-  and later (the version read from the `release` file of the `java` in `PATH`). A JVM that refuses it (`=deny`, a later JDK's default) gets,
+  and later (the version read from the `release` file of the `java` in `PATH`;
+  `rexxjs` gets them from the launcher, in `REXXJ_JVM_FLAGS`, for the server's
+  JVM). On Java 27 and later the launchers also pass
+  `-XX:+UnlockDiagnosticVMOptions -XX:+DelayAfterInliningCutoff`, so that C2 goes on
+  inlining past its node limit in the interpreter's huge methods instead of
+  giving up (suggested by Jorn Vernee on panama-dev; `rexxcps`, JDK 27: +3% with
+  `Unsafe`, +16% with `java.lang.foreign`, `prototypes/memory-bench`). It is a
+  diagnostic flag: if a later JDK drops it, the launchers stop passing it there.
+  A JVM that refuses it (`=deny`, a later JDK's default) gets,
   on Java 22 and later, the same memory through `java.lang.foreign` instead,
   by itself, about a third slower (`-Drexxjvm.memory=mapped` asks for it;
   `docs/java-from-rexx-design.md`). Build with Maven on JDK 22 or later for

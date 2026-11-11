@@ -301,7 +301,11 @@ static HANDLE start_server(const char *path) {
 
     wbuf cl = { 0 };
     wputs(&cl, L"java -Xss16m ");
-    const wchar_t *opts = _wgetenv(L"REXXJ_JAVA_OPTIONS");     /* as rexxj.cmd: as they are */
+    /* the launcher's options for this java's version (rexxj.cmd: Unsafe allowed, the
+       inlining cutoff delayed), then the user's; as rexxj.cmd passes them: as they are */
+    const wchar_t *jvmflags = _wgetenv(L"REXXJ_JVM_FLAGS");
+    if (jvmflags && *jvmflags) { wputs(&cl, jvmflags); wputs(&cl, L" "); }
+    const wchar_t *opts = _wgetenv(L"REXXJ_JAVA_OPTIONS");
     if (opts && *opts) { wputs(&cl, opts); wputs(&cl, L" "); }
     wputs(&cl, L"\"-Drexxjvm.executable="); wputs(&cl, wdir); wputs(&cl, L"\\rexx.cmd\" ");
     wputs(&cl, L"\"-Drexxjvm.home="); wputs(&cl, wdir); wputs(&cl, L"\" ");
