@@ -21,8 +21,9 @@ import run.endive.wasm.types.MemoryLimits;
  *
  * <p>The reservation must stay lazy: each thread's C stack is malloc'd from the linear
  * memory and mostly untouched, and the block is reserved at the maximum size. But
- * {@code Arena.allocate} zero-fills what it allocates, touching every page (4 GB: 35 s,
- * 4.2 GB resident, JDK 25). So the block is a private (copy-on-write) mapping of a temp
+ * {@code Arena.allocate} zero-fills what it allocates, touching every page (4 GB: 3-4 s
+ * and 4.3 GB resident, JDK 25.0.4, 2 cores; 2 GB: 2.2 GB resident, where rexxj's whole
+ * process is ~124 MB with this mapping). So the block is a private (copy-on-write) mapping of a temp
  * file, extended to the size and deleted at once: the mapping costs nothing until
  * touched, untouched pages read as zeros (the file's hole), and written pages become
  * the process's own memory, never written back to the file. Mapping {@code /dev/zero}

@@ -373,7 +373,8 @@ the same object: `UnsafeMemory` (as before), and, in the jar's
 when Maven runs on JDK 22 or later, `scripts/mvn22.sh`), `MappedMemory`, with
 `java.lang.foreign` and no restricted method: a private (copy-on-write)
 mapping of a temp file, extended to the size and deleted at once, lazy like
-`malloc` (`Arena.allocate` zero-fills eagerly: 4 GB, 35 s; `FileChannel.map`
+`malloc` (`Arena.allocate` zero-fills eagerly, every page resident: 4 GB, 3–4 s and 4.3 GB
+resident, JDK 25.0.4, 11/11/2026; the 35 s measured on 3/11 does not reproduce; `FileChannel.map`
 refuses `/dev/zero`). `Blocks` picks: `UnsafeMemory` while the JVM allows it,
 the fastest; `MappedMemory` when the JVM denies it
 (`--sun-misc-unsafe-memory-access=deny`) or with `-Drexxjvm.memory=mapped`
