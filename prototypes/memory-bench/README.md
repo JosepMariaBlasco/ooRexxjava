@@ -63,6 +63,16 @@ r13381; 2 cores, 3 alternated rounds, median; M clauses/s):
 
 `delay` gives the segment 16% and `Unsafe` 3%; the segment stays about 40% behind.
 
+## `Arena.allocate` for the whole memory (11/11/2026)
+
+The first mail to panama-dev said 4 GB took 35 s to allocate; measured again
+(JDK 25.0.4, 2 cores, 7 GB, `Arena.ofConfined()` and `ofShared()`), 4 GB takes
+3–4 s and 2 GB 1–2 s: the 35 s does not reproduce. What stays is residency: the
+segment is zero-filled, so all of it is resident at once (2 GB allocated: 2.2 GB
+RSS; 4 GB: 4.3 GB), where `rexxj` reserves the module's maximum, 2 GB, and its
+whole JVM is about 124 MB RSS with the lazy mapping (`say "hi"`, `Unsafe` or the
+mapped segment alike).
+
 ## Results (3/11/2026, before the fix: `vm` ran 19 instructions per run)
 
 
