@@ -1,0 +1,50 @@
+# prototypes/wasm-bench: vm.wasm under rexxj, Unsafe against the mapped segment, on
+# several JDKs, with and without DelayAfterInliningCutoff where there is one. Measurements,
+# not checks; dispatched by hand. rexxj from the saved build's dist (C and jar alike).
+name: wasm-bench
+on:
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds per round
+        default: '1'
+      rounds:
+        description: Rounds per run (after 3 s of warm-up)
+        default: '8'
+jobs:
+  bench:
+    strategy:
+      fail-fast: false
+      matrix:
+        java: [25, 27]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: The saved build's dist
+        run: |
+          git fetch -q --depth 1 origin saved-build
+          mkdir -p "$RUNNER_TEMP/saved" && git archive FETCH_HEAD | tar -x -C "$RUNNER_TEMP/saved"
+          tar -xzf "$RUNNER_TEMP/saved/oorexxjava-dist.tar.gz" dist
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: ${{ matrix.java }}
+      - name: vm.wasm
+        env:
+          SECONDS_PER_ROUND: ${{ inputs.seconds }}
+          ROUNDS: ${{ inputs.rounds }}
+        run: |
+          nproc; java -version 2>&1 | head -1
+          run() {   # label, then REXXJ_JAVA_OPTIONS
+            echo "== $1"
+            REXXJ_JAVA_OPTIONS="$2" dist/rexxj prototypes/wasm-bench/vm.wasm "$SECONDS_PER_ROUND" "$ROUNDS" 2>&1 | grep -v '^WARNING'
+          }
+          # the launcher passes -XX:+DelayAfterInliningCutoff on 27 and later: a later option undoes it
+          for round in 1 2; do
+            run "unsafe" ""
+            run "mapped" "-Drexxjvm.memory=mapped"
+            if [ "${{ matrix.java }}" -ge 27 ]; then
+              run "unsafe, no delay" "-XX:-DelayAfterInliningCutoff"
+              run "mapped, no delay" "-Drexxjvm.memory=mapped -XX:-DelayAfterInliningCutoff"
+            fi
+          done
