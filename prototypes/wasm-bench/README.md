@@ -44,3 +44,46 @@ the same as the mapped one, as it should be (the same segment accesses).
 - It reproduces `rexxcps`'s pattern: about 40% lost without the flag; with it the
   segment gains 37% but stays about 20% behind, where MemBench's `vm` closed the gap.
 - `Unsafe` does not move with the flag, as in `rexxcps` (+3%).
+
+## Where the rest goes (12/11/2026)
+
+**The accesses are left out of line by C2's inlining budget, and a segment access
+spends five times more of it.** `-XX:+PrintInlining` on `vm.wasm` (JDK 25): the
+generated functions call Endive's `CompiledMachineShaded.memoryReadInt` /
+`memoryWriteInt` for each access; many are not inlined, for `total inlining greater
+than DesiredMethodLimit` (both memories) and, with the segment only,
+`NodeCountInliningCutoff` (what `DelayAfterInliningCutoff` lifts). One access,
+inlined whole, is at most 134–149 bytes of bytecode with `Unsafe`, 752–811 with the
+segment (`SegmentVarHandle.checkSegment`, `checkEnclosingLayout`, `checkAccess`,
+`checkBounds` and the `VarHandleGuards` around them: `@ForceInline`, but counted
+against `DesiredMethodLimit`, 8,000 bytes per compiled method), so a function fits
+about 10 inlined segment accesses where it fits about 55 with `Unsafe`. The rest are
+calls to the accessor, compiled on its own, where the segment's checks cannot be
+merged or hoisted. JFR (JDK 25, `vm.wasm`, mapped): 33% of the samples in
+`AbstractMemorySegmentImpl.checkBounds` (inlined into the accessors); rexxcps, mapped:
+28% in the segment's code, half of it in the out-of-line accessors, and only 5% in
+interpreted code (with `Unsafe` too).
+
+`-XX:-ClipInlining` (a product flag) lifts `DesiredMethodLimit`. M ops/s, medians,
+`wasm-bench.yml` runs 43191274730 and 43191984211 (GitHub, 4 cores):
+
+| | `Unsafe` | mapped | segment vs `Unsafe` |
+|---|---|---|---|
+| `vm.wasm`, JDK 27 (`Delay`, the launchers' default) | 20.4 / 22.6 | 16.1 / 18.0 | −21% |
+| `vm.wasm`, JDK 27, `-ClipInlining` | 29.3 / 31.9 | 18.4 / 21.2 | −35% |
+| `vm.wasm`, JDK 25 | 19.6 / 19.4 | 11.8 / 11.9 | −39% |
+| `vm.wasm`, JDK 25, `-ClipInlining` | 22.0 / 22.7 | 12.4 / 13.4 | −43% |
+| `rexxcps` (M clauses/s), JDK 27 | 5.35 | 3.20 | −40% |
+| `rexxcps`, JDK 27, `-ClipInlining` | 5.84 | 3.30 | −43% |
+| `rexxcps`, JDK 25 | 5.05 | 2.72 | −46% |
+| `rexxcps`, JDK 25, `-ClipInlining` | 5.32 | 2.72 | −49% |
+
+- The budget held `Unsafe` back too: lifted, it gains far more than the segment
+  (`vm.wasm` +44% against +15% on JDK 27; `rexxcps` +9% against +3%). So the
+  segment's gap is not only the budget: in `rexxcps` it stays at about 40% whatever
+  the inlining limits.
+- `vm.wasm`'s interpreter loop (`func_81`) is never compiled (over HotSpot's 8,000
+  bytes: `-XX:-DontCompileHugeMethods` gives `Unsafe` +20%, the segment nothing unless
+  with `-ClipInlining`, +25%: a method that big is over `DesiredMethodLimit` by
+  itself, so none of its accesses are inlined). Endive's method splitting (#270, and
+  #292 for the build-time compiler) is the fix for that one.
