@@ -87,3 +87,19 @@ interpreted code (with `Unsafe` too).
   with `-ClipInlining`, +25%: a method that big is over `DesiredMethodLimit` by
   itself, so none of its accesses are inlined). Endive's method splitting (#270, and
   #292 for the build-time compiler) is the fix for that one.
+
+## `-XX:-ClipInlining` for rexxj: its cost (12/11/2026)
+
+This machine (2 cores), `rexxcps` with `averaging=400`, `Unsafe`, two runs each:
+M clauses/s, code cache used at exit (`-XX:+PrintCodeCache`, the heaps' `used`
+added), total compilation time (`-XX:+CITime`); `say "hi"`, median of 7 starts.
+
+| | `rexxcps` | code cache | compilation | `say "hi"` |
+|---|---|---|---|---|
+| JDK 21 | 5.11 / 5.22 | 50.7 / 51.0 MB | 3.64 / 3.67 s | 667 ms |
+| JDK 21, `-ClipInlining` | 5.66 / 5.46 | 49.0 / 49.4 MB | 3.36 / 3.58 s | 635 ms |
+| JDK 25 | 5.53 / 5.41 | 37.1 / 39.6 MB | 3.48 / 3.83 s | 667 ms |
+| JDK 25, `-ClipInlining` | 6.12 / 5.90 | 38.2 / 37.8 MB | 3.51 / 3.59 s | 684 ms |
+
+With JDK 27 on GitHub's runners (above): `rexxcps` +9%. So 7–11% faster on 21, 25
+and 27, at no cost in code cache, compilation time or start-up.
