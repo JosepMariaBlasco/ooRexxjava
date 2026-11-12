@@ -39,10 +39,13 @@ jobs:
             echo "== $1"
             REXXJ_JAVA_OPTIONS="$2" dist/rexxj prototypes/wasm-bench/vm.wasm "$SECONDS_PER_ROUND" "$ROUNDS" 2>&1 | grep -v '^WARNING'
           }
-          # the launcher passes -XX:+DelayAfterInliningCutoff on 27 and later: a later option undoes it
+          # the launcher passes -XX:+DelayAfterInliningCutoff on 27 and later: a later option
+          # undoes it; -XX:-ClipInlining lifts C2's DesiredMethodLimit (8000 inlined bytes)
           for round in 1 2; do
             run "unsafe" ""
             run "mapped" "-Drexxjvm.memory=mapped"
+            run "unsafe, -ClipInlining" "-XX:-ClipInlining"
+            run "mapped, -ClipInlining" "-Drexxjvm.memory=mapped -XX:-ClipInlining"
             if [ "${{ matrix.java }}" -ge 27 ]; then
               run "unsafe, no delay" "-XX:-DelayAfterInliningCutoff"
               run "mapped, no delay" "-Drexxjvm.memory=mapped -XX:-DelayAfterInliningCutoff"
