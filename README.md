@@ -438,8 +438,14 @@ Four things got it there from 0.56 M (02–04/11/2026):
   diagnostic flag: if a later JDK drops it, the launchers stop passing it there.
   A JVM that refuses it (`=deny`, a later JDK's default) gets,
   on Java 22 and later, the same memory through `java.lang.foreign` instead,
-  by itself, about a third slower (`-Drexxjvm.memory=mapped` asks for it;
-  `docs/java-from-rexx-design.md`). Build with Maven on JDK 22 or later for
+  by itself, about a third slower (`docs/java-from-rexx-design.md`): a
+  `MemorySegment` over the operating system's own lazy reservation (`mmap`, or
+  `VirtualAlloc` on Windows) when the JVM grants native access, which the
+  launchers do on Java 22 and later (`--enable-native-access=ALL-UNNAMED`, as
+  Maurizio Cimadamore advised on panama-dev; `-Drexxjvm.memory=native` asks for
+  it); without native access, a private mapping of a deleted temp file, not on
+  Windows (`-Drexxjvm.memory=mapped` asks for it). The two segments are equally
+  fast (`prototypes/wasm-bench`). Build with Maven on JDK 22 or later for
   that: `scripts/mvn22.sh`, which `build.sh` uses, finds one if there is.
 - **The relaxed bounds check** (04/11/2026): for a module whose memory may
   reach the runtime's 2 GB (`rexx.wasm`), a plain access checks only that its

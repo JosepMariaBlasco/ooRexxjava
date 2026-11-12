@@ -49,6 +49,25 @@ $env:TZ = "America/New_York"
 $out = & $rexx -e "say time('O') / 3600000000" 2>$null
 $env:TZ = $null
 Check "local time, TZ=America/New_York" ([TimeZoneInfo]::FindSystemTimeZoneById("America/New_York").GetUtcOffset($now).TotalHours) ($out -join "|")
+# the memory without Unsafe (OsReservation: VirtualAlloc, with native access, Java 22+);
+# on Java 23+ also with Unsafe denied, the JVM's choice a later JDK will make
+$jv = 0
+$rel = if ($env:JAVA_HOME) { Join-Path $env:JAVA_HOME "release" } else { "" }
+if ($rel -and (Test-Path $rel)) {
+    $m = Select-String -Path $rel -Pattern '^JAVA_VERSION="(\d+)' | Select-Object -First 1
+    if ($m) { $jv = [int]$m.Matches[0].Groups[1].Value }
+}
+if ($jv -ge 22) {
+    $env:REXXJ_JAVA_OPTIONS = "-Drexxjvm.memory=native"
+    $out = & $rexx -e "s = copies('x', 1000000); say length(s)" 2>&1
+    Check "memory from VirtualAlloc (-Drexxjvm.memory=native)" "1000000" ($out -join "|")
+    if ($jv -ge 23) {
+        $env:REXXJ_JAVA_OPTIONS = "--sun-misc-unsafe-memory-access=deny"
+        $out = & $rexx -e "s = copies('x', 1000000); say length(s)" 2>&1
+        Check "Unsafe denied: the memory from VirtualAlloc" "1000000" ($out -join "|")
+    }
+    $env:REXXJ_JAVA_OPTIONS = $null
+}
 # through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
 # windows.yml as test-ctrlbreak.exe; Java takes Ctrl+Break for a thread dump)
 $cb = Join-Path (Split-Path $rexx) "test-ctrlbreak.exe"

@@ -27,7 +27,9 @@ import run.endive.wasm.types.MemoryLimits;
  * file, extended to the size and deleted at once: the mapping costs nothing until
  * touched, untouched pages read as zeros (the file's hole), and written pages become
  * the process's own memory, never written back to the file. Mapping {@code /dev/zero}
- * would be simpler, but {@code FileChannel.map} refuses it.
+ * would be simpler, but {@code FileChannel.map} refuses it. Or, when this code has
+ * native access, the OS's own reservation ({@link OsReservation}): the same, without a
+ * file, and on Windows too, where the temp file does not work.
  */
 class MappedMemory extends FlatMemory {
     private static final ValueLayout.OfByte BYTE = ValueLayout.JAVA_BYTE;
@@ -42,33 +44,43 @@ class MappedMemory extends FlatMemory {
 
     private final MemorySegment m;
 
-    /** The memory for these limits: a Relaxed one if they allow it (FlatMemory.relaxed). */
-    static MappedMemory of(MemoryLimits limits) throws IOException {
-        return FlatMemory.relaxed(limits) ? new Relaxed(limits) : new MappedMemory(limits, false);
+    /**
+     * The memory for these limits: a Relaxed one if they allow it (FlatMemory.relaxed);
+     * the segment the OS's own reservation ({@link OsReservation}) if {@code os}, else the
+     * mapping of a temp file. The accesses are the same code either way.
+     */
+    static MappedMemory of(MemoryLimits limits, boolean os) throws IOException {
+        return FlatMemory.relaxed(limits) ? new Relaxed(limits, os) : new MappedMemory(limits, false, os);
     }
 
     /** The relaxed check (FlatMemory, "Two ways to check"). */
     static final class Relaxed extends MappedMemory {
-        Relaxed(MemoryLimits limits) throws IOException { super(limits, true); }
+        Relaxed(MemoryLimits limits, boolean os) throws IOException { super(limits, true, os); }
         @Override long at(int addr, int n) { return atRelaxed(addr, n); }
     }
 
-    private MappedMemory(MemoryLimits limits, boolean relaxed) throws IOException {
+    private MappedMemory(MemoryLimits limits, boolean relaxed, boolean os) throws IOException {
         super(limits, relaxed);
         Arena a = Arena.ofShared();               // the arena kind makes no difference to speed
         long size = Math.max(reservation(), 4096);
+        try {
+            this.m = os ? OsReservation.reserve(size, a) : mapTempFile(size, a);
+        } catch (IOException | RuntimeException x) {
+            a.close();
+            throw x;
+        }
+        freeWith(a::close);
+    }
+
+    private static MemorySegment mapTempFile(long size, Arena a) throws IOException {
         Path p = Files.createTempFile("rexxj-memory", ".bin");
         try (FileChannel c = FileChannel.open(p, READ, WRITE)) {
             Files.delete(p);
             c.write(ByteBuffer.wrap(new byte[1]), size - 1);   // the file's size, a hole up to it
-            this.m = c.map(FileChannel.MapMode.PRIVATE, 0, size, a);
-        } catch (IOException | RuntimeException x) {
-            a.close();
-            throw x;
+            return c.map(FileChannel.MapMode.PRIVATE, 0, size, a);
         } finally {
             Files.deleteIfExists(p);
         }
-        freeWith(a::close);
     }
 
 

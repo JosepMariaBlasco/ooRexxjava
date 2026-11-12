@@ -10,15 +10,17 @@
 # rexxjvm.Server (client/rexxjs.c; README.md, "A warm JVM: rexxjs"), if it was built
 D=$(dirname "$(readlink -f "$0")")
 # Options by the version of the java in PATH, from its release file (none: no options):
-# Java 23 and later, allow sun.misc.Unsafe (FlatMemory) without JDK 24+'s warning on every
-# run (JEP 498), older ones refuse the option; Java 27 and later, C2 inlines on past its
-# node cutoff (DelayAfterInliningCutoff, diagnostic: README.md, "Speed"), older ones do
+# Java 22 and later, native access (the memory without Unsafe, OsReservation: README.md,
+# "Speed"); Java 23 and later, allow sun.misc.Unsafe (FlatMemory) without JDK 24+'s
+# warning on every run (JEP 498), older ones refuse the option; Java 27 and later, C2
+# inlines on past its node cutoff (DelayAfterInliningCutoff, diagnostic), older ones do
 # not know it. $REXXJ_JVM_FLAGS hands them to rexxjs for the server's JVM.
-UNSAFE= DELAY= V=
+NATIVE= UNSAFE= DELAY= V=
 J=$(command -v java) && R=$(dirname "$(dirname "$(readlink -f "$J")")")/release && [ -f "$R" ] &&
   V=$(sed -n 's/^JAVA_VERSION="\([0-9]*\).*/\1/p' "$R")
+[ "${V:-0}" -ge 22 ] 2>/dev/null && NATIVE=--enable-native-access=ALL-UNNAMED
 [ "${V:-0}" -ge 23 ] 2>/dev/null && UNSAFE=--sun-misc-unsafe-memory-access=allow
 [ "${V:-0}" -ge 27 ] 2>/dev/null && DELAY="-XX:+UnlockDiagnosticVMOptions -XX:+DelayAfterInliningCutoff"
-REXXJ_JVM_FLAGS="$UNSAFE $DELAY"; export REXXJ_JVM_FLAGS
+REXXJ_JVM_FLAGS="$NATIVE $UNSAFE $DELAY"; export REXXJ_JVM_FLAGS
 [ -n "$REXXJ_SERVER" ] && [ -x "$D/rexxjs" ] && exec "$D/rexxjs" "$@"
-PATH="$D:$PATH" exec java -Xss16m $UNSAFE $DELAY $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"
+PATH="$D:$PATH" exec java -Xss16m $NATIVE $UNSAFE $DELAY $REXXJ_JAVA_OPTIONS -Drexxjvm.executable="$D/rexx" -Drexxjvm.home="$D" -javaagent:"$D/rexxj.jar" -cp "$D/rexxj.jar:$D/bsf4oorexx.jar${CLASSPATH:+:$CLASSPATH}" rexxjvm.RunWasm "$@"
