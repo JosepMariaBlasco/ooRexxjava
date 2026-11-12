@@ -10,15 +10,19 @@ rem Java 22 and later, native access (the memory without Unsafe, OsReservation: 
 rem "Speed"); Java 23 and later, allow sun.misc.Unsafe (FlatMemory) without JDK 24+'s
 rem warning on every run (JEP 498), older ones refuse the option; Java 27 and later, C2
 rem inlines on past its node cutoff (DelayAfterInliningCutoff, diagnostic), older ones do
-rem not know it. %REXXJ_JVM_FLAGS% hands them to rexxjs.exe for the server's JVM.
+rem not know it. And on every version, -XX:-ClipInlining: C2 inlines past its
+rem DesiredMethodLimit, which leaves the module's memory accesses out of line (rexxcps
+rem +7-11% on 21, 25 and 27, no cost found: prototypes\wasm-bench\README.md).
+rem %REXXJ_JVM_FLAGS% hands them to rexxjs.exe for the server's JVM.
 set "JX=" & set "JV=" & set "JM=" & set "NATIVE=" & set "UNSAFE=" & set "DELAY="
+set "CLIP=-XX:-ClipInlining"
 for %%J in (java.exe) do set "JX=%%~$PATH:J"
 if defined JX for %%H in ("%JX%\..\..") do if exist "%%~fH\release" for /f "tokens=2 delims==" %%V in ('findstr /b "JAVA_VERSION=" "%%~fH\release"') do set "JV=%%~V"
 if defined JV for /f "delims=." %%M in ("%JV%") do set "JM=%%M"
 if defined JM if %JM% GEQ 22 set "NATIVE=--enable-native-access=ALL-UNNAMED"
 if defined JM if %JM% GEQ 23 set "UNSAFE=--sun-misc-unsafe-memory-access=allow"
 if defined JM if %JM% GEQ 27 set "DELAY=-XX:+UnlockDiagnosticVMOptions -XX:+DelayAfterInliningCutoff"
-set "REXXJ_JVM_FLAGS=%NATIVE% %UNSAFE% %DELAY%"
+set "REXXJ_JVM_FLAGS=%CLIP% %NATIVE% %UNSAFE% %DELAY%"
 rem %REXXJ_SERVER%: the program in a warm JVM, through rexxjs.exe, the native client of
 rem rexxjvm.Server (client/rexxjs_win.c; README.md, "A warm JVM: rexxjs"), if it is here
 if not defined REXXJ_SERVER goto java
@@ -29,5 +33,5 @@ exit /b %ERRORLEVEL%
 set "CP=%D%\rexxj.jar;%D%\bsf4oorexx.jar"
 if defined CLASSPATH set "CP=%CP%;%CLASSPATH%"
 set "PATH=%D%;%PATH%"
-java -Xss16m %NATIVE% %UNSAFE% %DELAY% %REXXJ_JAVA_OPTIONS% "-Drexxjvm.executable=%D%\rexx.cmd" "-Drexxjvm.home=%D%" "-javaagent:%D%\rexxj.jar" -cp "%CP%" rexxjvm.RunWasm --orx-wasm-rexxc %*
+java -Xss16m %CLIP% %NATIVE% %UNSAFE% %DELAY% %REXXJ_JAVA_OPTIONS% "-Drexxjvm.executable=%D%\rexx.cmd" "-Drexxjvm.home=%D%" "-javaagent:%D%\rexxj.jar" -cp "%CP%" rexxjvm.RunWasm --orx-wasm-rexxc %*
 exit /b %ERRORLEVEL%

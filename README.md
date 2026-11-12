@@ -436,6 +436,11 @@ Four things got it there from 0.56 M (02–04/11/2026):
   giving up (suggested by Jorn Vernee on panama-dev; `rexxcps`, JDK 27: +3% with
   `Unsafe`, +16% with `java.lang.foreign`, `prototypes/memory-bench`). It is a
   diagnostic flag: if a later JDK drops it, the launchers stop passing it there.
+  On every version they also pass `-XX:-ClipInlining`: without it, C2 stops
+  inlining into a method once 8,000 bytes of bytecode are inlined
+  (`DesiredMethodLimit`), and the module's memory accesses past that point stay
+  calls (`rexxcps` +7–11% on JDK 21, 25 and 27, with no more code cache,
+  compilation time or start-up: `prototypes/wasm-bench/README.md`).
   A JVM that refuses it (`=deny`, a later JDK's default) gets,
   on Java 22 and later, the same memory through `java.lang.foreign` instead,
   by itself, about a third slower (`docs/java-from-rexx-design.md`): a
