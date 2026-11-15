@@ -403,7 +403,10 @@ went to 512 KB): 394 of 409, 24,769 tests, 36 failures, 2 errors. `SysSleep`
 passes; `CALL` also failed the two stack-depth tests on threads; and the four
 socket samples' groups (`scclient`, `scserver`, `sfclient`, `sfserver`) failed
 with `EADDRINUSE`: they use the same port and two groups run at once; one at a
-time they pass (`suite-jvm-r13514-windows-java25-server-samples.csv`).
+time they pass (`suite-jvm-r13514-windows-java25-server-samples.csv`). With the
+512 KB stacks (`suite-jvm-r13514-threadstack512-windows-java25-server.csv`):
+**397 of 409**, 31 failures, 2 errors: the twelve groups of r13398 (`SysSleep`
+again, timing; `CALL` only its case-sensitive file names), the samples passing.
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
