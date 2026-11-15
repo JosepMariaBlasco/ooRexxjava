@@ -189,7 +189,7 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
   `RexxCreateInterpreter`, waits (`embed_home`) and, when the instance is
   closed, calls `Terminate`.
 - **Calls.** Each call is a foreign entry, as in the prototype: the
-  dispatcher's `pthread_create` (the threads' wasm stack, 256 KB by default:
+  dispatcher's `pthread_create` (the threads' wasm stack, 512 KB by default:
   see "Memory per thread" below), handed by `thread-spawn`
   to the calling Java thread, whose worker calls `embed_run`; from there
   the Java side calls the export `orx_embed_run` on that thread's
@@ -323,7 +323,7 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   (about 370 natively), because Chicory's frames are on the Java stack.
   Now the activities' threads and the dispatcher's workers get
   `orxWasiThreadStack()` (`compat/orx_wasi_host.c`, the WASI patch's
-  `SysActivity::create`): 256 KB by default, `REXXJVM_THREADSTACK` or
+  `SysActivity::create`): 256 KB by default (512 KB since 15/11/2026), `REXXJVM_THREADSTACK` or
   `-Drexxjvm.threadstack` (bytes, or `1M`, `2M`; 128K to 256M). The main
   thread keeps 8 MB. Measured: with 200 live threads, 78 MB of wasm memory
   instead of about 1.6 GB (28 MB of it fixed; 128 MB with 512K); in a

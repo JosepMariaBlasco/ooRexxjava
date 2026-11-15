@@ -160,17 +160,19 @@ void orxWasiStartSignals(void)
    memory, and Chicory backs every page of it with Java heap as soon as the
    memory grows: 8 MB per live thread, and at most ~240 threads in the 2 GB
    the module may have. A Rexx call level takes ~80 bytes of this stack under
-   WASI (~370 natively: Chicory's frames are on the Java stack), so 256 KB
-   gives a thread ~2,600 levels of Rexx recursion (natively ~22,500 with
-   8 MB) and room for ~8,000 live threads (BSF4ooRexx's rgf_multithreading
-   has 2,601 live at once: with 512 KB they exhaust Java's default heap).
+   WASI (~370 natively: Chicory's frames are on the Java stack), so 512 KB
+   gives a thread ~5,900 levels of Rexx recursion (natively ~22,500 with
+   8 MB; ooRexx's suite expects at least 5,000 on any thread, CALL.testGroup,
+   #2106: 256 KB, the default until r13514, gave ~2,660) and room for ~4,000
+   live threads (BSF4ooRexx's rgf_multithreading has 2,601 live at once in
+   its heavier case).
    Rexx recursion is checked against the stack (Activity::checkStackSpace,
    error 11), so running out of it is an ordinary error. REXXJVM_THREADSTACK overrides the default: bytes, or
    with a K or M suffix (1M, 2M); at least 128K, at most 256M (the
    launcher sets it from -Drexxjvm.threadstack, RunWasm.java). The main
    thread keeps its 8 MB. */
 #include <stdlib.h>
-#define ORX_WASI_THREAD_STACK_DEFAULT (256 * 1024)
+#define ORX_WASI_THREAD_STACK_DEFAULT (512 * 1024)
 #define ORX_WASI_THREAD_STACK_MIN     (128 * 1024)
 
 size_t orxWasiThreadStack(void)

@@ -85,14 +85,18 @@ that ends with a separator names a directory, and our `stat` took `file/` for
 the file; `suite-jvm-r13514-server-rerun.csv`). The other two are new tests:
 `CALL`'s `test_stacksize_start_thread` and `test_stacksize_reply_thread`
 expect a recursion depth of at least 5,000 on a thread other than the main
-one, and with the threads' 256 KB stacks it is 2,661 ("Threads and their
-stacks"; 5,938 with 512 KB); and `SysGetMessage`'s seven tests of damaged
+one, and with the threads' 256 KB stacks it was 2,661: their default is
+512 KB since then ("Threads and their stacks"; 5,938); and `SysGetMessage`'s seven tests of damaged
 catalogs ask the host whether its C library is glibc (`getconf`), while the
 interpreter's is wasi-libc, which does not open them ("Message catalog not
-found" where the tests expect "Invalid message catalog"). `CALL`'s
-`test_stacksize_main_thread` passes but takes over two minutes (a depth of
-104,233 on the main thread's 8 MB stack; 22,546 natively), more than the
-run's 300 s for a group when two groups run at once.
+found" where the tests expect "Invalid message catalog"; sent to ooRexx's
+test suite as a finding). With both fixes
+(`suite-jvm-r13514-threadstack512-server.csv`, 600 s for a group): **408 of
+409**, 24,769 tests, 7 failures, 0 errors, only `SysGetMessage`. Two groups
+are slow now: `CALL` (493 s with two groups at once, 158 s alone:
+`test_stacksize_main_thread` recurses until the stack ends, a depth of
+104,233 on the main thread's 8 MB, 22,546 natively, and the time grows with
+the square of the depth) and `TRACE` (128 s, was under a second).
 
 Up to test/trunk r13381 that count included, as passed with no tests, the
 groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
@@ -392,7 +396,14 @@ the services (`SysGetServByName`/`Port`: no services database) and six
 (test/trunk r13370) skip on `WINDOWS`, but here the OS is WASI and `cmd.exe`
 cannot pass a command line of 20,000 characters. On ooRexx r13398 with
 test/trunk r13397 (`results/suite-jvm-r13398-windows-java25-server.csv`): the
-same 394 of 406, the same failures, 24,524 tests (the new ones pass).
+same 394 of 406, the same failures, 24,524 tests (the new ones pass). On ooRexx
+r13514 with test/trunk r13515 (15/11/2026,
+`results/suite-jvm-r13514-windows-java25-server.csv`, before the threads' stack
+went to 512 KB): 394 of 409, 24,769 tests, 36 failures, 2 errors. `SysSleep`
+passes; `CALL` also failed the two stack-depth tests on threads; and the four
+socket samples' groups (`scclient`, `scserver`, `sfclient`, `sfserver`) failed
+with `EADDRINUSE`: they use the same port and two groups run at once; one at a
+time they pass (`suite-jvm-r13514-windows-java25-server-samples.csv`).
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
@@ -510,9 +521,10 @@ REXXJ_JAVA_OPTIONS=-Xmx4g rexxj program.rex
 
 Every Rexx thread (`START`, `REPLY`, a Java thread calling Rexx) is a wasm
 thread: a Java thread of its own, with a C stack taken from the module's
-linear memory. The main thread has 8 MB; the others **256 KB** by default,
-enough for about 2,600 levels of Rexx recursion (natively, with 8 MB, about
-22,500) and for about 8,000 live threads: the linear memory is 2 GB at most,
+linear memory. The main thread has 8 MB; the others **512 KB** by default
+(256 KB until 15/11/2026),
+enough for about 5,900 levels of Rexx recursion (natively, with 8 MB, about
+22,500; ooRexx's suite expects at least 5,000) and for about 4,000 live threads: the linear memory is 2 GB at most,
 and the stacks of the threads alive at once must fit in it.
 The linear memory is not Java heap: it is one block outside it
 (`FlatMemory`), reserved at its maximum size, whose pages the operating
