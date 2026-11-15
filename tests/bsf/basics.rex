@@ -13,17 +13,18 @@ call check .bsf~new("java.lang.String", "ñandú")~length, 5, "UTF-8 string to J
 arr = bsf.createJavaArray("int.class", 3)
 arr[1] = 10; arr[2] = 20; arr[3] = 12
 call check arr[1] + arr[2] + arr[3], 42, "int[]"
-signal on syntax name javaError
-.bsf~new("java.lang.Integer", "no-number")
-call check "no condition", "condition", "Java exception"
-javaError:
-  if condition("C") = "SYNTAX" then call check condition("O")~code, "40.900", "Java exception as SYNTAX"
-  /* a callback: Java's Collections.sort calls a Rexx comparator */
-  cmp = BsfCreateRexxProxy(.ByLength~new, , "java.util.Comparator")
-  .bsf~bsf.import("java.util.Collections")~sort(list, cmp)
-  call check list~toString, "[uva, pera, kiwi, manzana]", "Rexx comparator called by Java"
-  say "basics:" .checks "checks," .failed "failed"
-  exit .failed
+do
+  .bsf~new("java.lang.Integer", "no-number")
+  call check "no condition", "condition", "Java exception"
+catch c = syntax
+  call check c~code, "40.900", "Java exception as SYNTAX"
+end
+/* a callback: Java's Collections.sort calls a Rexx comparator */
+cmp = BsfCreateRexxProxy(.ByLength~new, , "java.util.Comparator")
+.bsf~bsf.import("java.util.Collections")~sort(list, cmp)
+call check list~toString, "[uva, pera, kiwi, manzana]", "Rexx comparator called by Java"
+say "basics:" .checks "checks," .failed "failed"
+exit .failed
 
 check: procedure
   use arg got, expected, what

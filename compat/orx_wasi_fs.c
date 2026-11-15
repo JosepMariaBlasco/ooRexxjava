@@ -143,6 +143,14 @@ static void rxj_timespec(struct timespec *ts, int64_t ns)
     ts->tv_nsec = (long)r;
 }
 
+/* A path that ends with a separator names a directory: "file/" is ENOTDIR, as in
+   POSIX (the launcher's java.nio paths drop the separator) */
+static int rxj_names_directory(const char *path)
+{
+    size_t l = strlen(path);
+    return l > 1 && path[l - 1] == '/';
+}
+
 static int rxj_stat(const char *p, struct stat *st, int follow)
 {
     char buf[PATH_MAX];
@@ -152,10 +160,16 @@ static int rxj_stat(const char *p, struct stat *st, int follow)
         return -1;
     }
     int64_t f[F_COUNT];
-    int rc = rxj_file_stat(path, follow, f);
+    /* with the separator, a symbolic link is followed even by lstat */
+    int rc = rxj_file_stat(path, follow || rxj_names_directory(path), f);
     if (rc != 0)
     {
         return rxj_result(rc);
+    }
+    if (rxj_names_directory(path) && f[F_TYPE] != 2)
+    {
+        errno = ENOTDIR;
+        return -1;
     }
     static const mode_t types[] = { 0, S_IFREG, S_IFDIR, S_IFLNK, S_IFCHR, S_IFBLK, S_IFIFO, S_IFSOCK };
     memset(st, 0, sizeof(*st));
@@ -218,7 +232,19 @@ int orx_wasi_access(const char *p, int mode)
 {
     char buf[PATH_MAX];
     const char *path = rxj_path(p, buf, sizeof(buf));
-    return path == NULL ? -1 : rxj_result(rxj_file_access(path, mode & (R_OK | W_OK | X_OK)));
+    if (path == NULL)
+    {
+        return -1;
+    }
+    if (rxj_names_directory(path))
+    {
+        struct stat st;
+        if (rxj_stat(path, &st, 1) != 0)
+        {
+            return -1;
+        }
+    }
+    return rxj_result(rxj_file_access(path, mode & (R_OK | W_OK | X_OK)));
 }
 
 int orx_wasi_chmod(const char *p, mode_t mode)

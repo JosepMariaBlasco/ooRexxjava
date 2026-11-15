@@ -1,7 +1,9 @@
 say "1. error in the main activity, trapped:"
-signal on syntax name s1
-x = 1 / 0
-s1: say "   trapped" condition("O")~code
+do
+  x = 1 / 0
+catch c = syntax
+  say "   trapped" c~code
+end
 say "2. error in a started activity:"
 m = .T~new~start("boom")
 m~wait

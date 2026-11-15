@@ -1,0 +1,5 @@
+group,status,ran,assertions,failures,errors,seconds
+ooRexx/base/class/Stream.testGroup,ok,116,25722,0,0,4
+ooRexx/base/keyword/CALL.testGroup,fail,34,203,2,0,158
+ooRexx/base/rexxutil/SysFileXXX.testGroup,ok,44,170,0,0,0
+ooRexx/base/rexxutil/platform/unix/SysGetMessage.testGroup,fail,19,180,7,0,1

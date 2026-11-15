@@ -17,7 +17,7 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
  endif ()
  # Library definition
  if (ORX_WASM)
-@@ -1003,6 +1010,18 @@
+@@ -1004,6 +1011,18 @@
                ${build_extensions_rxsock_dir}/rxsock.cpp
                ${build_extensions_rxsock_dir}/rxsockfn.cpp
                ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
@@ -138,7 +138,7 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SysRexxUtil.cpp oorexx/interprete
  
  
      if (!isatty(ttyfd))                 /* connected to a terminal ?          */
-@@ -1588,19 +1597,19 @@
+@@ -1689,19 +1698,19 @@
      else if (!strcasecmp(selector, "PMEM"))  /* Show max memory RSS used   */
      {
          char buffer[100];

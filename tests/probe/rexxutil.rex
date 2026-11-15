@@ -162,12 +162,12 @@ out: procedure
 t: procedure expose f dir S. R. ST. SN. DL. W. XA.
   parse arg expr, skip
   if skip <> '' then do; call out expr, '(not run)'; return; end
-  signal on syntax name err
-  interpret 'r = ' expr
-  if .local~probe.unix == .true then r = r '| errno' SysGeterrno()
-  call out expr, r
-  return
-err:
-  call out expr, 'SYNTAX' condition('o')~code':' condition('o')~message
+  do
+    interpret 'r = ' expr
+    if .local~probe.unix == .true then r = r '| errno' SysGeterrno()
+    call out expr, r
+  catch c = syntax
+    call out expr, 'SYNTAX' c~code':' c~message
+  end
   return
 

@@ -186,7 +186,7 @@ public class MultiRun {
 
         // a signal: a HALT in the program
         Path halt = program("halt.rex",
-            "signal on halt\nsay 'ready'\ndo forever; call syssleep 0.05; end\nhalt:\nsay 'halted'\nexit 4\n");
+            "do\nsay 'ready'\ndo forever; call syssleep 0.05; end\ncatch halt\nsay 'halted'\nexit 4\nend\n");
         o = options(halt);
         ByteArrayOutputStream hout = new ByteArrayOutputStream();
         o.out = hout;

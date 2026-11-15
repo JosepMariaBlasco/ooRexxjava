@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13398 (since
-06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13514 (since
+15/11/2026; r13398 from 06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -78,7 +78,21 @@ On ooRexx r13389 with test/trunk r13388 (06/11/2026, through the warm JVM,
 one group that failed, `ProcessInvocation` (`testContextHaltExit`,
 `testContextIOExitDebug`), took 18 s there instead of 8 and passes alone
 (three runs out of three) and in a second full run: load-sensitive, as the
-timing groups.
+timing groups. On ooRexx r13514 with test/trunk r13515 (15/11/2026,
+`suite-jvm-r13514-server.csv`): 405 of 409 in about 10 min, 24,769 tests. Two of the
+four were ours and are fixed (`Stream` and `SysFileXXX`, #1940's tests: a name
+that ends with a separator names a directory, and our `stat` took `file/` for
+the file; `suite-jvm-r13514-server-rerun.csv`). The other two are new tests:
+`CALL`'s `test_stacksize_start_thread` and `test_stacksize_reply_thread`
+expect a recursion depth of at least 5,000 on a thread other than the main
+one, and with the threads' 256 KB stacks it is 2,661 ("Threads and their
+stacks"; 5,938 with 512 KB); and `SysGetMessage`'s seven tests of damaged
+catalogs ask the host whether its C library is glibc (`getconf`), while the
+interpreter's is wasi-libc, which does not open them ("Message catalog not
+found" where the tests expect "Invalid message catalog"). `CALL`'s
+`test_stacksize_main_thread` passes but takes over two minutes (a depth of
+104,233 on the main thread's 8 MB stack; 22,546 natively), more than the
+run's 300 s for a group when two groups run at once.
 
 Up to test/trunk r13381 that count included, as passed with no tests, the
 groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
@@ -113,7 +127,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13398 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13514 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at
