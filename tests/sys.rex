@@ -1,8 +1,16 @@
 f = "test-out.txt"
-call lineout f, "line one"; call lineout f, "line two"; call lineout f
-say "1. file:" lines(f) "lines, first =" linein(f, 1)
-s = .stream~new(f); s~open("read"); say "   via .Stream:" s~arrayIn~items "lines"; s~close
-call SysFileDelete f
+do
+  call lineout f, "line one"; call lineout f, "line two"; call lineout f
+  say "1. file:" lines(f) "lines, first =" linein(f, 1)
+  s = .stream~new(f); s~open("read")
+  do
+    say "   via .Stream:" s~arrayIn~items "lines"
+  finally
+    s~close
+  end
+finally
+  call SysFileDelete f
+end
 push "pushed"; queue "queued"
 say "2. queue:" queued() "items:" linein("QUEUE:") "/" linein("QUEUE:")
 say "3. SysFileTree:" SysFileTree("*.rex", "st.", "F") st.0 "file(s)"

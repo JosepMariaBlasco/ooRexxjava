@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13514 (since
-15/11/2026; r13398 from 06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13532 (since
+17/11/2026; r13514 from 15/11/2026, r13398 from 06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -97,6 +97,13 @@ are slow now: `CALL` (493 s with two groups at once, 158 s alone:
 `test_stacksize_main_thread` recurses until the stack ends, a depth of
 104,233 on the main thread's 8 MB, 22,546 natively, and the time grows with
 the square of the depth) and `TRACE` (128 s, was under a second).
+On ooRexx r13532 with test/trunk r13533 (17/11/2026,
+`suite-jvm-r13532-server.csv`): **411 of 412** in 5 min, 24,956 tests, 1
+failure, 0 errors: `SysSleep` (`SysSleep(0.5)` took 0.541 s, 0.526 allowed),
+timing, which passes alone. `SysGetMessage` passes (#2172: its damaged-catalog
+tests skip under WASI), and `CALL` and `TRACE` are fast again (20 s and 2 s:
+r13527, a condition that nothing traps for many internal calls no longer
+costs the square of their number to unwind).
 
 Up to test/trunk r13381 that count included, as passed with no tests, the
 groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
@@ -131,7 +138,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13514 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13532 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at

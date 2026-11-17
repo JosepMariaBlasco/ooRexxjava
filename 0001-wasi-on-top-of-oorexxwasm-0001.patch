@@ -17,7 +17,7 @@ diff -ruN oorexx.ref/CMakeLists.txt oorexx/CMakeLists.txt
  endif ()
  # Library definition
  if (ORX_WASM)
-@@ -1004,6 +1011,18 @@
+@@ -1005,6 +1012,18 @@
                ${build_extensions_rxsock_dir}/rxsock.cpp
                ${build_extensions_rxsock_dir}/rxsockfn.cpp
                ${build_extensions_platform_dir}/rxunixsys/rxunixsys.cpp)
