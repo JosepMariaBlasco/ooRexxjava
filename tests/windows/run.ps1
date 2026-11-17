@@ -58,15 +58,18 @@ if ($rel -and (Test-Path $rel)) {
     if ($m) { $jv = [int]$m.Matches[0].Groups[1].Value }
 }
 if ($jv -ge 22) {
-    $env:REXXJ_JAVA_OPTIONS = "-Drexxjvm.memory=native"
+    # added to the caller's options (windows-endive.yml's -Drexxjvm.winwasi=false), and
+    # those put back afterwards: the checks below run with them too
+    $opts = $env:REXXJ_JAVA_OPTIONS
+    $env:REXXJ_JAVA_OPTIONS = "$opts -Drexxjvm.memory=native".Trim()
     $out = & $rexx -e "s = copies('x', 1000000); say length(s)" 2>&1
     Check "memory from VirtualAlloc (-Drexxjvm.memory=native)" "1000000" ($out -join "|")
     if ($jv -ge 23) {
-        $env:REXXJ_JAVA_OPTIONS = "--sun-misc-unsafe-memory-access=deny"
+        $env:REXXJ_JAVA_OPTIONS = "$opts --sun-misc-unsafe-memory-access=deny".Trim()
         $out = & $rexx -e "s = copies('x', 1000000); say length(s)" 2>&1
         Check "Unsafe denied: the memory from VirtualAlloc" "1000000" ($out -join "|")
     }
-    $env:REXXJ_JAVA_OPTIONS = $null
+    $env:REXXJ_JAVA_OPTIONS = $opts
 }
 # through rexxjs.exe only: Ctrl+Break, sent on as SIGINT, is a HALT (ctrlbreak.c, built by
 # windows.yml as test-ctrlbreak.exe; Java takes Ctrl+Break for a thread dump)
@@ -83,10 +86,11 @@ Info "BSF4ooRexx" ..\bsf\basics.rex
 if ($fails) {
     # what the module asked of WASI (Endive's log), for the first failures
     "---- trace: WASI calls of rexx -e ""say 'hi'"" (Endive's log; paths and fds)"
-    $env:REXXJ_JAVA_OPTIONS = "-Drexxjvm.wasi.log=true"
+    $opts = $env:REXXJ_JAVA_OPTIONS
+    $env:REXXJ_JAVA_OPTIONS = "$opts -Drexxjvm.wasi.log=true".Trim()
     & $rexx -e "say 'hi'" 2>&1 | Select-String -Pattern "prestat|path_|fd_filestat|fd_open|errno|Error|error" |
         Select-Object -First 80 | ForEach-Object { "     $_" }
-    $env:REXXJ_JAVA_OPTIONS = $null
+    $env:REXXJ_JAVA_OPTIONS = $opts
     "$fails check(s) failed"; exit 1
 }
 "all checks passed"
