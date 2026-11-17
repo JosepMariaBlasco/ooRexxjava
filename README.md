@@ -414,6 +414,9 @@ time they pass (`suite-jvm-r13514-windows-java25-server-samples.csv`). With the
 512 KB stacks (`suite-jvm-r13514-threadstack512-windows-java25-server.csv`):
 **397 of 409**, 31 failures, 2 errors: the twelve groups of r13398 (`SysSleep`
 again, timing; `CALL` only its case-sensitive file names), the samples passing.
+On ooRexx r13532 with test/trunk r13533 (17/11/2026,
+`results/suite-jvm-r13532-windows-java25-server.csv`): **400 of 412**, 24,956
+tests, 31 failures, 2 errors, the same twelve groups.
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
