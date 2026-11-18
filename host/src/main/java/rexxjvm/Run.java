@@ -157,9 +157,28 @@ final class Run {
      * Java stack for every thread that runs wasm code. Chicory's frames live on it, so
      * deep Rexx recursion needs far more than Java's default (the suite's CALL group
      * overflows 64 MB and passes with 256 MB). Reserved, not committed: unused stack
-     * costs no memory. {@code -Drexxjvm.stack=<bytes>} overrides it.
+     * costs no memory. {@code -Drexxjvm.stack} overrides it: bytes, or with a K, M or G
+     * suffix (512M, 1G); a value that is not one of those is reported and ignored.
      */
-    static final long STACK = Long.getLong("rexxjvm.stack", 256L << 20);
+    static final long STACK = size("rexxjvm.stack", 256L << 20);
+
+    /** A size property: bytes, or with a K, M or G suffix (either case); else the default. */
+    static long size(String property, long dflt) {
+        String v = System.getProperty(property);
+        if (v == null || v.isBlank()) return dflt;
+        String s = v.strip();
+        int shift = "KMG".indexOf(Character.toUpperCase(s.charAt(s.length() - 1))) * 10 + 10;
+        if (shift != 0) s = s.substring(0, s.length() - 1);
+        try {
+            long n = Long.parseLong(s);
+            if (n > 0 && n <= Long.MAX_VALUE >> shift) return n << shift;
+        } catch (NumberFormatException ignored) {
+            // reported below
+        }
+        System.err.println("rexxj: -D" + property + "=" + v
+            + " is not a size (bytes, or with K, M or G): " + dflt + " bytes");
+        return dflt;
+    }
 
     private static final AtomicInteger IDS = new AtomicInteger(1);
     private static final ThreadLocal<Run> CURRENT = new ThreadLocal<>();

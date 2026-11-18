@@ -560,6 +560,11 @@ from 128K to 256M):
 REXXJVM_THREADSTACK=2M rexxj deep.rex
 ```
 
+Under each level of Rexx there are also about ten Java frames (Endive's), 2.5 to
+3 KB of the thread's Java stack: every thread that runs wasm code has 256 MB of it,
+reserved, not committed. A deeper C stack may need more: `-Drexxjvm.stack` in
+`REXXJ_JAVA_OPTIONS` (bytes, or with `K`, `M` or `G`: `512M`, `1G`).
+
 Why, and the measurements, in
 [`docs/java-from-rexx-design.md`](docs/java-from-rexx-design.md) ("Memory
 per thread").
