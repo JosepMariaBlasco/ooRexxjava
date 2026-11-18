@@ -440,6 +440,15 @@ tests, 31 failures, 2 errors, the same twelve groups.
 On ooRexx r13535 with test/trunk r13536 (17/11/2026,
 `results/suite-jvm-r13535-windows-java25-server.csv`): **400 of 412**, 25,000
 tests, 31 failures, 2 errors, the same twelve groups.
+On ooRexx r13545 with test/trunk r13544 (18/11/2026,
+`results/suite-jvm-r13545-windows-java25-server.csv`, run 44354282581):
+**401 of 413**, 25,075 tests, 31 failures, 3 errors: eleven of the twelve
+(`SysSleep` passes) and `TRACE`, whose `TEST_TRACE_LABEL_WITH_FORWARD` (new in
+test/trunk r13540) meets a TraceObject without `TRACELINE` (98.973) in two runs
+of two; `TEST_TRACE_REPLY` then gets its late lines. `TraceObject~new` appends
+the object to the collector before `RexxActivation::createTraceObject` fills
+it, and the test reads the collector while REPLY's threads still trace. On
+Linux it passes (seven runs of seven).
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
