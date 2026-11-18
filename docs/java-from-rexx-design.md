@@ -325,7 +325,7 @@ BSF4ooRexx runs unchanged: its C++, its Java and its Rexx.
   `orxWasiThreadStack()` (`compat/orx_wasi_host.c`, the WASI patch's
   `SysActivity::create`): 256 KB by default (512 KB since 15/11/2026), `REXXJVM_THREADSTACK` or
   `-Drexxjvm.threadstack` (bytes, or `1M`, `2M`; 128K to 256M). The main
-  thread keeps 8 MB. Measured: with 200 live threads, 78 MB of wasm memory
+  thread kept 8 MB (2 MB since 18/11/2026: README, "Threads and their stacks"). Measured: with 200 live threads, 78 MB of wasm memory
   instead of about 1.6 GB (28 MB of it fixed; 128 MB with 512K); in a
   thread, 2,661 levels of Rexx recursion (5,938 with 512K, 104,242 with
   8 MB; natively 22,525), then error 11 as usual; at most about 8,000 live

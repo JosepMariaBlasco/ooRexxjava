@@ -63,7 +63,11 @@ BSF_CC=BSF4ooRexx/bsf4oorexx.dev/source_cc/BSF4ooRexx.cc
   -I oorexx/api -I oorexx/api/platform/unix -I "$C/jni" -I "$JNI_INCLUDE" -c "$BSF_CC" -o bsf.o
 "$W/bin/clang" --target=wasm32-wasip1-threads -pthread -O2 -I "$C/jni" -I "$JNI_INCLUDE" -c "$C/orx_bsf.c" -o bsf-lib.o
 BSF_EXPORTS=$("$W/bin/llvm-nm" --defined-only --extern-only bsf.o | awk '$2 == "T" && $3 ~ /^Java_/ {printf " -Wl,--export=%s", $3}')
-LF_LIBS="-fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=8388608"
+# -z stack-size: the main thread's C stack, 2 MB (about 26,000 levels of Rexx recursion,
+# natively about 15,000-22,500 with 8 MB): its Rexx levels also nest on wasm-main's Java
+# stack (Run.STACK, 256 MB, ~2.5-3 KB a level), and error 11 must come before it runs out;
+# with 8 MB, ~104,000 levels, it did not always (FORWARD.testGroup, 18/11/2026)
+LF_LIBS="-fwasm-exceptions -lunwind -lwasi-emulated-signal -lwasi-emulated-getpid -lwasi-emulated-process-clocks -lwasi-emulated-mman -Wl,--max-memory=2147483648 -Wl,-z,stack-size=2097152"
 LF="$WORK/stubs.o $WORK/host.o $WORK/fs.o $WORK/net.o $WORK/embed.o $WORK/jni.o $WORK/bsf.o $WORK/bsf-lib.o$BSF_EXPORTS $LF_LIBS"
 sed "s|^\tset(WASI_SDK_PREFIX .*|\tset(WASI_SDK_PREFIX $W)|" "$HERE/wasi-p1-threads.cmake" > toolchain.cmake
 # a fresh tree: configure first without our objects, which need the interpreter's own

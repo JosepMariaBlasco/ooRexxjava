@@ -155,7 +155,7 @@ void orxWasiStartSignals(void)
 /* The C stack of the threads the interpreter creates (activities: START,
    REPLY, early reply of a method) and of the threads that run Rexx for Java
    (orx_wasi_embed.cpp's workers). Natively a new activity gets the stack size
-   of the thread that creates it, 8 MB here (-z stack-size), which Linux only
+   of the thread that creates it, 8 MB natively, which Linux only
    reserves; under WASI pthread_create takes it with malloc from the linear
    memory, and Chicory backs every page of it with Java heap as soon as the
    memory grows: 8 MB per live thread, and at most ~240 threads in the 2 GB
@@ -170,7 +170,8 @@ void orxWasiStartSignals(void)
    error 11), so running out of it is an ordinary error. REXXJVM_THREADSTACK overrides the default: bytes, or
    with a K or M suffix (1M, 2M); at least 128K, at most 256M (the
    launcher sets it from -Drexxjvm.threadstack, RunWasm.java). The main
-   thread keeps its 8 MB. */
+   thread has 2 MB (-z stack-size, build.sh): with 8 MB its ~104,000 levels could exhaust
+   the Java stack under them (256 MB, Run.STACK) before error 11. */
 #include <stdlib.h>
 #define ORX_WASI_THREAD_STACK_DEFAULT (512 * 1024)
 #define ORX_WASI_THREAD_STACK_MIN     (128 * 1024)

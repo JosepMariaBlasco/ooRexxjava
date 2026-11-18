@@ -101,7 +101,7 @@ diff -ruN oorexx.ref/interpreter/platform/unix/SysActivity.cpp oorexx/interprete
  {
 +#ifdef __wasi__
 +    // under WASI a thread's stack comes from the linear memory, all of it backed by the
-+    // host: not the creator's (8 MB), but the size the WASI layer gives (orx_wasi_host.c)
++    // host: not the creator's (2 MB), but the size the WASI layer gives (orx_wasi_host.c)
 +    stackSize = orxWasiThreadStack();
 +#endif
      // try to create the thread and raise an exception for any failure

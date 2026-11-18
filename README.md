@@ -540,7 +540,8 @@ REXXJ_JAVA_OPTIONS=-Xmx4g rexxj program.rex
 
 Every Rexx thread (`START`, `REPLY`, a Java thread calling Rexx) is a wasm
 thread: a Java thread of its own, with a C stack taken from the module's
-linear memory. The main thread has 8 MB; the others **512 KB** by default
+linear memory. The main thread has 2 MB (8 MB until 18/11/2026: its levels nest on
+the Java stack too, and with 8 MB that ran out before error 11, `FORWARD`); the others **512 KB** by default
 (256 KB until 15/11/2026),
 enough for about 5,900 levels of Rexx recursion (natively, with 8 MB, about
 22,500; ooRexx's suite expects at least 5,000) and for about 4,000 live threads: the linear memory is 2 GB at most,
