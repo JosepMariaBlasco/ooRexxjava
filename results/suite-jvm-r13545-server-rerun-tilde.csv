@@ -1,0 +1,2 @@
+group,status,ran,assertions,failures,errors,seconds
+ooRexx/base/rexxutil/platform/unix/tilde.testGroup,ok,1,18,0,0,0

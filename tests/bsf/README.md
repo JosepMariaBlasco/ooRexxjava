@@ -31,7 +31,8 @@ cd /path/to/oorexx-test      # ooRexx's test/trunk
 env -u JAVA_TOOL_OPTIONS rexx testOORexx.rex -R /path/to/testUnits/bsf4rexx/rgf -s
 ```
 
-Results (02/11/2026, Java 21, 2 cores, threads' C stack 256 KB):
+Results (18/11/2026, BSF4ooRexx r1131, ooRexx r13545, test framework of
+test/trunk r13544, Java 21, 2 cores, threads' C stack 256 KB):
 
 | Group | Tests | Assertions | Failures | Errors |
 |---|---|---|---|---|
@@ -39,18 +40,20 @@ Results (02/11/2026, Java 21, 2 cores, threads' C stack 256 KB):
 | `lex` | 771 | 886 | 0 | 0 |
 | `java8` | 39 | 1,500 | 0 | 0 |
 | `java6` | 25 | 1,265 | 0 | 0 |
-| `rgf_multithreading` | 6 | 1,557 | 0 | 0 |
+| `jdor` | 245 | 1,533 | 0 | 0 |
+| `rgf_multithreading` | 6 | 5,605 | 0 | 0 |
 
-`java9` has no test groups. `rgf_multithreading`'s group 80 runs 712
-threads; its source has two heavier cases commented out, 2,601 and 10,201
-threads (`nrJavaThreads`, `nrRexxThreads` = 50 or 100 in a copy of the
-group). 2,601 passes (5,101 assertions, 7 s). Before the threads' C stack
-went down from 8 MB to 256 KB (`README.md`, "Threads and their stacks") it
-ran out of Java heap and hung; with 512 KB it still ran out (2,601 threads
-alive at once, 1.5 GB of default heap here). 10,201 passed three runs of
-four (20,201 assertions, 13 s); in the fourth more threads were alive at
-once, the heap ran out (each thread also has its `Instance` of the module)
-and the run hung.
+`java9` has no test groups (the framework reports it as one error). The
+table's first version (02/11/2026, BSF4ooRexx before r1131) had no `jdor` row
+and `rgf_multithreading` with 1,557 assertions: its group 80 ran 714 threads.
+At r1131 it runs 2,761 ("heavy burden", `nrJavaThreads` 46, `nrRexxThreads`
+58), with the 714-, 2,601-, 5,776- and 10,201-thread cases commented out.
+Then, a copy of the group with 2,601 threads passed (5,101 assertions, 7 s). Before the threads' C stack went down from 8 MB to 256 KB
+(`README.md`, "Threads and their stacks") it ran out of Java heap and hung;
+with 512 KB it still ran out (2,601 threads alive at once, 1.5 GB of default
+heap here). 10,201 passed three runs of four (20,201 assertions, 13 s); in the
+fourth more threads were alive at once, the heap ran out (each thread also has
+its `Instance` of the module) and the run hung.
 
 Since the linear memory is off-heap (`FlatMemory`, 02/11/2026) the heap no
 longer runs out, and 10,201 meets the module's own limit instead: with 256 KB
