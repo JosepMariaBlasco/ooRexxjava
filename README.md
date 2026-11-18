@@ -347,6 +347,17 @@ differs from `rexxj`: programs share one JVM, so a crash, an
 `OutOfMemoryError` or Java code that calls `System.exit` affects all of them;
 and Java code sees the server's environment and current directory (`/`), not
 the client's (`docs/java-from-rexx-design.md`, "The warm JVM and its client").
+In the server a program's linear memory is at most 1 GB, not the module's 2 GB
+(`-Drexxjvm.maxmemory`, a size, in `REXXJ_JAVA_OPTIONS`: `2G` gives back the
+2 GB): past it the program gets error 5, as when memory runs out natively,
+instead of the server outgrowing the machine with every program in it. No
+program in the test suite needs half of it. Once in a few full suites (18/11/2026,
+during `expressions/SPECIAL`, not reproduced alone) the server grew to 5–6 GB and
+was killed; the cause is not known yet. `-Drexxjvm.memwatch=512M` reports each
+time a program's memory grows past a multiple of that size, with the Java stack
+(the wasm functions that asked for it), to standard error or to the file
+`-Drexxjvm.memwatch.log` names; a growth past `rexxjvm.maxmemory` is reported the
+same way, always.
 
 ```bash
 rexxjs --orx-server-stop    # ends this build's server and the programs it runs

@@ -92,7 +92,10 @@ abstract class FlatMemory implements Memory {
     FlatMemory(MemoryLimits limits, boolean relaxed) {
         this.guard = relaxed;
         this.limits = limits;
-        this.maxPages = Math.min(limits.maximumPages(), RUNTIME_MAX_PAGES);
+        int max = Math.min(limits.maximumPages(), RUNTIME_MAX_PAGES);
+        long cap = Run.size("rexxjvm.maxmemory", 0);
+        if (cap > 0) max = (int) Math.max(limits.initialPages(), Math.min(max, cap / PAGE_SIZE));
+        this.maxPages = max;
         this.nPages = limits.initialPages();
         this.limit = nPages * PAGE_SIZE;
         this.waitStates = limits.shared() ? new ConcurrentHashMap<>() : null;
@@ -105,13 +108,57 @@ abstract class FlatMemory implements Memory {
     @Override public int maximumPages() { return maxPages; }
     @Override public boolean shared() { return limits.shared(); }
 
+    /**
+     * A diagnostic, off by default: {@code -Drexxjvm.memwatch=1G} (a size, Run.size)
+     * reports every time a memory grows past a multiple of it, with the growing thread's
+     * Java stack (which wasm functions asked), to the file {@code -Drexxjvm.memwatch.log}
+     * names (appended), else to standard error. For finding who makes a run's memory grow.
+     * {@code -Drexxjvm.maxmemory} (a size) caps the memory instead of the module's 2 GB:
+     * a growth past it fails (malloc gets nothing: Rexx's error 5) and is reported the same
+     * way, once per memory. rexxjvm.Server sets it to 1G when it is not set (Server.main).
+     */
+    static final long WATCH = Run.size("rexxjvm.memwatch", 0);
+
+    /** Whether a growth past the cap was reported already (under growLock). */
+    private boolean capped;
+
+    private static void report(String what, int pages) {
+        StringBuilder b = new StringBuilder();
+        b.append(java.time.LocalTime.now()).append(" memwatch: ").append(what).append(' ')
+         .append((long) pages * PAGE_SIZE >> 20).append(" MB, thread ")
+         .append(Thread.currentThread().getName()).append('\n');
+        for (StackTraceElement e : Thread.currentThread().getStackTrace()) {
+            b.append("    at ").append(e).append('\n');
+        }
+        String file = System.getProperty("rexxjvm.memwatch.log");
+        if (file == null) {
+            System.err.print(b);
+            return;
+        }
+        try {
+            java.nio.file.Files.writeString(java.nio.file.Path.of(file), b,
+                java.nio.file.StandardOpenOption.CREATE, java.nio.file.StandardOpenOption.APPEND);
+        } catch (java.io.IOException x) {
+            System.err.print(b);
+        }
+    }
+
     @Override public int grow(int size) {
         synchronized (growLock) {
             int prev = nPages;
             int n = prev + size;
-            if (size < 0 || n > maxPages || n < prev) return -1;
+            if (size < 0 || n < prev) return -1;
+            if (n > maxPages) {
+                if (n <= RUNTIME_MAX_PAGES && !capped) {
+                    capped = true;           // once per memory: what asked past -Drexxjvm.maxmemory
+                    report("refused, past -Drexxjvm.maxmemory (" + ((long) maxPages * PAGE_SIZE >> 20)
+                        + " MB): growing to", n);
+                }
+                return -1;
+            }
             limit = n * PAGE_SIZE;
             nPages = n;                       // publishes limit too
+            if (WATCH > 0 && (long) n * PAGE_SIZE / WATCH > (long) prev * PAGE_SIZE / WATCH) report("memory", n);
             return prev;
         }
     }

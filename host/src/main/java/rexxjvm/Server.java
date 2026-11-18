@@ -118,6 +118,11 @@ public final class Server {
             System.exit(2);
         }
         Path socket = Path.of(args[0]);
+        // A run's linear memory: 1 GB here, not the module's 2 GB, unless asked otherwise.
+        // In the suite no run needs 512 MB; a run that runs away (once in a few full
+        // suites, 18/11/2026, during expressions/SPECIAL) then gets error 5 instead of
+        // taking the server, and every run in it, past the machine's memory.
+        if (System.getProperty("rexxjvm.maxmemory") == null) System.setProperty("rexxjvm.maxmemory", "1G");
         if (RxApi.UNIX == null) {
             System.err.println("rexxjvm.Server: Unix domain sockets need Java 16 or later");
             System.exit(1);
