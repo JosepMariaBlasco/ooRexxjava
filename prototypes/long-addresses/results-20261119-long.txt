@@ -1,0 +1,25 @@
+jdk21 round1 base unsafe vm=24.37 cps=5.32
+jdk21 round1 base mapped vm=23.57 cps=4.92
+jdk21 round1 long unsafe vm=22.53 cps=4.78
+jdk21 round1 long mapped vm=22.51 cps=4.80
+jdk21 round2 base unsafe vm=23.76 cps=5.01
+jdk21 round2 base mapped vm=22.99 cps=5.25
+jdk21 round2 long unsafe vm=22.95 cps=4.93
+jdk21 round2 long mapped vm=23.80 cps=5.00
+jdk21 round3 base unsafe vm=23.50 cps=5.18
+jdk21 round3 base mapped vm=24.79 cps=5.37
+jdk21 round3 long unsafe vm=23.52 cps=5.01
+jdk21 round3 long mapped vm=23.24 cps=4.63
+jdk25 round1 base unsafe vm=22.13 cps=5.44
+jdk25 round1 base mapped vm=14.03 cps=2.81
+jdk25 round1 long unsafe vm=22.24 cps=4.91
+jdk25 round1 long mapped vm=14.15 cps=2.87
+jdk25 round2 base unsafe vm=23.70 cps=5.60
+jdk25 round2 base mapped vm=14.26 cps=2.92
+jdk25 round2 long unsafe vm=21.84 cps=4.82
+jdk25 round2 long mapped vm=14.20 cps=2.89
+jdk25 round3 base unsafe vm=23.56 cps=5.29
+jdk25 round3 base mapped vm=13.79 cps=2.77
+jdk25 round3 long unsafe vm=17.16 cps=5.28
+jdk25 round3 long mapped vm=13.16 cps=2.87
+EXIT 0

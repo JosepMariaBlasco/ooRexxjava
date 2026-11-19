@@ -1,0 +1,95 @@
+diff --git a/host/src/main/java/rexxjvm/FlatMemory.java b/host/src/main/java/rexxjvm/FlatMemory.java
+index b2a07ba..26bf1d5 100644
+--- a/host/src/main/java/rexxjvm/FlatMemory.java
++++ b/host/src/main/java/rexxjvm/FlatMemory.java
+@@ -270,6 +270,66 @@ abstract class FlatMemory implements Memory {
+     @Override public long readF64(int addr) { return readLong(addr); }
+     @Override public void writeF64(int addr, double data) { writeLong(addr, Double.doubleToRawLongBits(data)); }
+ 
++    // ---- plain accesses at a 64-bit effective address (LongAddr) ----------------------------
++
++    /*
++     * The same accesses, given WebAssembly's effective address: the i32 address
++     * zero-extended plus the access's offset, computed in long (no wrap-around), instead
++     * of Endive's getAddr (the int sum, or the address itself if negative). C2 does
++     * better with long address arithmetic (JDK-8397094); LongAddr is what the translated
++     * code calls when its helpers are rewritten (prototypes/memory-bench, "Addresses in
++     * long"). An effective address past 2 GB traps as getAddr's negative one does.
++     */
++
++    /** The offset of a plain access of n <= 8 bytes at ea; the relaxed subclasses override it. */
++    long atL(long ea, int n) {
++        return atStrictL(ea, n);
++    }
++
++    /** The relaxed check: below 2 GB, the guard covering the rest (see above). */
++    final long atRelaxedL(long ea, int n) {
++        return ea < 0x8000_0000L ? ea : atStrictL(ea, n);
++    }
++
++    /** The offset of an access of n bytes at ea; traps if out of bounds. */
++    final long atStrictL(long ea, int n) {
++        if (ea > (long) limit - n) return atSlowL(ea, n);
++        return ea;
++    }
++
++    private long atSlowL(long ea, int n) {
++        int lim = nPages * PAGE_SIZE;
++        if (ea > (long) lim - n)
++            throw new WasmRuntimeException("out of bounds memory access: attempted to access address: "
++                + ea + " but limit is: " + lim + " and size: " + n);
++        limit = lim;
++        return ea;
++    }
++
++    final byte readL(long ea) { return getByte(atL(ea, 1)); }
++    final void writeByteL(long ea, byte data) { putByte(atL(ea, 1), data); }
++    final short readShortL(long ea) {
++        short v = getShort(atL(ea, 2));
++        return BE ? Short.reverseBytes(v) : v;
++    }
++    final void writeShortL(long ea, short data) {
++        putShort(atL(ea, 2), BE ? Short.reverseBytes(data) : data);
++    }
++    final int readIntL(long ea) {
++        int v = getInt(atL(ea, 4));
++        return BE ? Integer.reverseBytes(v) : v;
++    }
++    final void writeI32L(long ea, int data) {
++        putInt(atL(ea, 4), BE ? Integer.reverseBytes(data) : data);
++    }
++    final long readLongL(long ea) {
++        long v = getLong(atL(ea, 8));
++        return BE ? Long.reverseBytes(v) : v;
++    }
++    final void writeLongL(long ea, long data) {
++        putLong(atL(ea, 8), BE ? Long.reverseBytes(data) : data);
++    }
++
+     // ---- blocks ----------------------------------------------------------------------------
+ 
+     @Override public void write(int addr, byte[] data, int offset, int size) {
+diff --git a/host/src/main/java/rexxjvm/UnsafeMemory.java b/host/src/main/java/rexxjvm/UnsafeMemory.java
+index 6375848..419393d 100644
+--- a/host/src/main/java/rexxjvm/UnsafeMemory.java
++++ b/host/src/main/java/rexxjvm/UnsafeMemory.java
+@@ -36,6 +36,7 @@ class UnsafeMemory extends FlatMemory {
+     static final class Relaxed extends UnsafeMemory {
+         Relaxed(MemoryLimits limits) { super(limits, true); }
+         @Override long at(int addr, int n) { return atRelaxed(addr, n); }
++        @Override long atL(long ea, int n) { return atRelaxedL(ea, n); }
+     }
+ 
+     private UnsafeMemory(MemoryLimits limits, boolean relaxed) {
+diff --git a/host/src/main/java22/rexxjvm/MappedMemory.java b/host/src/main/java22/rexxjvm/MappedMemory.java
+index 3bdc353..ab46999 100644
+--- a/host/src/main/java22/rexxjvm/MappedMemory.java
++++ b/host/src/main/java22/rexxjvm/MappedMemory.java
+@@ -57,6 +57,7 @@ class MappedMemory extends FlatMemory {
+     static final class Relaxed extends MappedMemory {
+         Relaxed(MemoryLimits limits, boolean os) throws IOException { super(limits, true, os); }
+         @Override long at(int addr, int n) { return atRelaxed(addr, n); }
++        @Override long atL(long ea, int n) { return atRelaxedL(ea, n); }
+     }
+ 
+     private MappedMemory(MemoryLimits limits, boolean relaxed, boolean os) throws IOException {

@@ -1,0 +1,16 @@
+jdk25 round1 base unsafe cps=5.36
+jdk25 round1 base mapped cps=2.72
+jdk25 round1 inline unsafe cps=5.42
+jdk25 round1 inline mapped cps=3.03
+jdk25 round2 base unsafe cps=5.38
+jdk25 round2 base mapped cps=2.74
+jdk25 round2 inline unsafe cps=5.43
+jdk25 round2 inline mapped cps=2.90
+jdk25 round3 base unsafe cps=5.35
+jdk25 round3 base mapped cps=2.86
+jdk25 round3 inline unsafe cps=5.09
+jdk25 round3 inline mapped cps=3.04
+jdk25 round4 base unsafe cps=5.17
+jdk25 round4 base mapped cps=2.85
+jdk25 round4 inline unsafe cps=5.68
+jdk25 round4 inline mapped cps=3.05

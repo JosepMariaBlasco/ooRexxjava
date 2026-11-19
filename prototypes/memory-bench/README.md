@@ -45,10 +45,9 @@ warm-up, median of 3 rounds in separate JVMs, alternated; M operations per secon
 - In the plain loop without our check, C2 vectorises or strength-reduces the
   `long` version and both memories reach the same 22,000: what JDK-8397094 is
   about. With our check (`int` limit compared in `long`) it does not.
-- Not yet measured: whether it carries over to Endive's translated code
-  (`RexxModuleMachineShaded`'s 12 plain `memoryRead*`/`memoryWrite*` helpers
-  rewritten to pass `Integer.toUnsignedLong(base) + offset` to `long` accessors
-  of `FlatMemory`), on `prototypes/wasm-bench` and `rexxcps`; nor on JDK 27.
+- On Endive's translated code (`rexxj`, 19/11/2026) it does not carry over:
+  `rexxcps` with `Unsafe` unchanged (or −10% with one call more per access), the
+  mapped segment +9% at best; `prototypes/long-addresses`.
 
 ## Results (5/11/2026, after the fix)
 
