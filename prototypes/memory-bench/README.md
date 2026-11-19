@@ -6,7 +6,7 @@ linear memory of the interpreter's WebAssembly module (`host/.../FlatMemory.java
 `java.lang.foreign` version costs. Written to be shown to Project Panama
 (panama-dev@openjdk.org).
 
-    java --sun-misc-unsafe-memory-access=allow MemBench.java unsafe|mapped|arena loop|vm [SECONDS]
+    java --sun-misc-unsafe-memory-access=allow MemBench.java unsafe|mapped|arena loop|vm|loopl|vml [SECONDS]
     ./run.sh [JAVA] [ROUNDS] [SECONDS]        # all of them, alternated, in separate JVMs
 
 `MemBench.java`'s javadoc says what each kind and workload is. In short: the
@@ -17,6 +17,38 @@ against its current size, then loads at `base + addr` (`Unsafe`) or
 `loop` is a plain loop; `vm` is an interpreter for a small register machine
 whose code, registers and data are all in the linear memory — the shape of
 ooRexx's interpreter compiled to WebAssembly and translated to bytecode.
+
+## Addresses in `long` (19/11/2026)
+
+Rony G. Flatscher's suggestion (19/11/2026), after JDK-8397094 (C2 and `int`
+address arithmetic): let the translated code do the address arithmetic in `long`.
+Endive's code computes the address in `int` (`getAddr(base, offset)`: the sum, or
+the base itself if negative, to trap) and calls `Memory.readInt(int)`; `FlatMemory`
+turns it into a `long` only inside. The workloads `loopl` and `vml` are `loop` and
+`vm` with a second interface, `MemoryL`, whose accessors take a `long`, and every
+address computed in `long` as WebAssembly defines it: the `i32` zero-extended plus
+the offset (`ea`), no wrap-around. The memories and their checks are the same.
+
+2 cores (x86-64, Linux), OpenJDK 25.0.4 (Ubuntu), 5 one-second runs after 3 s of
+warm-up, median of 3 rounds in separate JVMs, alternated; M operations per second:
+
+| | `unsafe` `int` | `unsafe` `long` | | `mapped` `int` | `mapped` `long` | |
+|---|---|---|---|---|---|---|
+| `vm` | 140 | 174 | **+24%** | 97 | 109 | **+12%** |
+| `vm`, `-Dnocheck=true` | 417 | 538 | +29% | 132 | 140 | +6% |
+| `loop` | 3,189 | 3,119 | −2% | 2,430 | 2,914 | +20% |
+| `loop`, `-Dnocheck=true` | 6,057 | 22,672 | ×3.7 | 4,913 | 22,470 | ×4.6 |
+
+- In `vm` (the interpreter's shape) both memories gain, `Unsafe` more: the
+  segment's gap to `Unsafe` grows from −31% to −37%. So `long` addresses would
+  speed up `rexxj` as it is (`Unsafe` by default), not close Panama's gap.
+- In the plain loop without our check, C2 vectorises or strength-reduces the
+  `long` version and both memories reach the same 22,000: what JDK-8397094 is
+  about. With our check (`int` limit compared in `long`) it does not.
+- Not yet measured: whether it carries over to Endive's translated code
+  (`RexxModuleMachineShaded`'s 12 plain `memoryRead*`/`memoryWrite*` helpers
+  rewritten to pass `Integer.toUnsignedLong(base) + offset` to `long` accessors
+  of `FlatMemory`), on `prototypes/wasm-bench` and `rexxcps`; nor on JDK 27.
 
 ## Results (5/11/2026, after the fix)
 

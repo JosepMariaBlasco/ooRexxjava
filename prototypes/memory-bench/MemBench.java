@@ -16,7 +16,7 @@ import java.nio.file.StandardOpenOption;
  *
  *   java MemBench.java KIND WORKLOAD [SECONDS]
  *     KIND      unsafe | mapped | arena
- *     WORKLOAD  loop | vm
+ *     WORKLOAD  loop | vm | loopl | vml   (loopl, vml: the same with long addresses)
  *   -Dnocheck=true leaves out the memory's own bounds check (FlatMemory's), to see
  *   what the segment's checks cost by themselves.
  *
@@ -52,8 +52,22 @@ public final class MemBench {
         void writeByte(int addr, byte v);
     }
 
+    /**
+     * The same with 64-bit addresses (-Daddr=long, workloads loopl and vml): what the
+     * translated code would call if the translator did the address arithmetic in long,
+     * as WebAssembly defines it (the effective address is the 32-bit address, zero-
+     * extended, plus the access's offset, with no wrap-around): Rony G. Flatscher's
+     * suggestion, 19/11/2026, after JDK-8397094 (C2 and int address arithmetic).
+     */
+    interface MemoryL {
+        int readInt(long addr);
+        void writeI32(long addr, int v);
+        byte read(long addr);
+        void writeByte(long addr, byte v);
+    }
+
     /** FlatMemory: the bounds check, then the block's own access. */
-    abstract static class Flat implements Memory {
+    abstract static class Flat implements Memory, MemoryL {
         static final int SIZE = 64 << 20;     // 64 MB in use; rexxj reserves 2 GB
         private int limit = SIZE;
 
@@ -74,6 +88,17 @@ public final class MemBench {
         @Override public final void writeI32(int addr, int v) { putInt(at(addr, 4), v); }
         @Override public final byte read(int addr) { return getByte(at(addr, 1)); }
         @Override public final void writeByte(int addr, byte v) { putByte(at(addr, 1), v); }
+
+        private final long limitL = SIZE;
+        private long at(long addr, int n) {
+            if (NOCHECK) return addr;
+            if ((addr | (limitL - n - addr)) < 0) throw new IndexOutOfBoundsException("addr " + addr);
+            return addr;
+        }
+        @Override public final int readInt(long addr) { return getInt(at(addr, 4)); }
+        @Override public final void writeI32(long addr, int v) { putInt(at(addr, 4), v); }
+        @Override public final byte read(long addr) { return getByte(at(addr, 1)); }
+        @Override public final void writeByte(long addr, byte v) { putByte(at(addr, 1), v); }
     }
 
     static final class UnsafeFlat extends Flat {
@@ -218,6 +243,60 @@ public final class MemBench {
         }
     }
 
+    /** loopl: loop with the addresses in long. */
+    static long loopl(MemoryL m, long passes) {
+        long ops = 0;
+        int s = 0;
+        for (long p = 0; p < passes; p++) {
+            for (int i = 0; i < N; i++) {
+                long a = DATA + 4L * i;
+                int v = m.readInt(a);
+                s += v;
+                m.writeI32(a, v + 1);
+            }
+            ops += 2L * N;
+        }
+        sink = s;
+        return ops;
+    }
+
+    /** The effective address of an access: the i32 zero-extended, plus the offset. */
+    static long ea(int addr, int offset) { return Integer.toUnsignedLong(addr) + offset; }
+
+    static int reg(MemoryL m, int r) { return m.readInt(REGS + 4L * r); }
+    static void reg(MemoryL m, int r, int v) { m.writeI32(REGS + 4L * r, v); }
+
+    /** vml: vm with every address computed in long (ea). */
+    static long vml(MemoryL m) {
+        int pc = 0;
+        long n = 0;
+        for (;;) {
+            long at = CODE + 4L * pc;
+            int op = m.read(at), a = m.read(at + 1) & 0xFF, b = m.read(at + 2) & 0xFF, c = m.read(at + 3) & 0xFF;
+            n++;
+            pc++;
+            switch (op) {
+                case HALT: return n;
+                case LI:   reg(m, a, b << c); break;
+                case ADD:  reg(m, a, reg(m, b) + reg(m, c)); break;
+                case ADDI: reg(m, a, reg(m, b) + c); break;
+                case LD:   reg(m, a, m.readInt(ea(reg(m, b), c))); break;
+                case ST:   m.writeI32(ea(reg(m, b), c), reg(m, a)); break;
+                case XOR:  reg(m, a, reg(m, b) ^ reg(m, c)); break;
+                case SHL:  reg(m, a, reg(m, b) << c); break;
+                case SHR:  reg(m, a, reg(m, b) >>> reg(m, c)); break;
+                case BLT:  if (reg(m, a) < reg(m, b)) pc = c; break;
+                case JMP:  pc = a; break;
+                case MUL:  reg(m, a, reg(m, b) * reg(m, c)); break;
+                case AND:  reg(m, a, reg(m, b) & reg(m, c)); break;
+                case MOV:  reg(m, a, reg(m, b)); break;
+                case LDB:  reg(m, a, m.read(ea(reg(m, b), c))); break;
+                case STB:  m.writeByte(ea(reg(m, b), c), (byte) reg(m, a)); break;
+                default:   throw new IllegalStateException("op " + op);
+            }
+        }
+    }
+
     static volatile int sink;
 
     public static void main(String[] args) throws Exception {
@@ -228,17 +307,25 @@ public final class MemBench {
                  : kind.equals("arena") ? SegmentFlat.arena()
                  : null;
         if (m == null) throw new IllegalArgumentException("kind: unsafe, mapped or arena");
-        if (work.equals("vm")) {
+        boolean vmw = work.equals("vm") || work.equals("vml");
+        if (!vmw && !work.equals("loop") && !work.equals("loopl")) throw new IllegalArgumentException("workload: loop, vm, loopl or vml");
+        MemoryL ml = (MemoryL) m;
+        if (vmw) {
             program(m);
             // 4 instructions to set up, 14 per element, the HALT: the whole array walked
-            long n = vm(m), expected = 4 + 14L * N + 1;
+            long n = work.equals("vm") ? vm(m) : vml(ml), expected = 4 + 14L * N + 1;
             if (n != expected) throw new IllegalStateException("vm ran " + n + " instructions, not " + expected);
         }
         double[] rates = new double[seconds];
         for (int s = -3; s < seconds; s++) {            // 3 s of warm-up
             long ops = 0, t0 = System.nanoTime(), t;
             do {
-                ops += work.equals("vm") ? vm(m) : loop(m, 16);
+                ops += switch (work) {
+                    case "vm" -> vm(m);
+                    case "vml" -> vml(ml);
+                    case "loop" -> loop(m, 16);
+                    default -> loopl(ml, 16);
+                };
                 t = System.nanoTime();
             } while (t - t0 < 1_000_000_000L);
             if (s >= 0) rates[s] = ops / ((t - t0) / 1e3);
