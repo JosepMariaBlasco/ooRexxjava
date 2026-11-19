@@ -461,6 +461,10 @@ On ooRexx r13550 with test/trunk r13551 (19/11/2026,
 `results/suite-jvm-r13550-windows-java25-server.csv`, run 44553328293):
 **401 of 413**, 25,090 tests, 31 failures, 2 errors: the usual twelve groups
 (`TRACE` passed this time; `SysSleep` failed again, timing).
+test/trunk r13553 (19/11/2026, the bugs Claude) fixes `TRACE`'s race: the test
+reads the trace through `.TraceObject~notify`, which gets each object complete;
+`TRACE` alone on Windows passes (run 44562554943), and on Linux three of three.
+`windows-suite.yml` defaults to it.
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
