@@ -60,6 +60,38 @@ public final class EmbedTest {
             } catch (Rexx.RexxException x) {
                 check("missing program code", x.code() / 1000, 3L);
             }
+            // a condition thrown (THROW) and not caught, out of a program: as it is
+            try {
+                in.callProgram(dir + "/throws.rex");
+                check("thrown condition raised", false, true);
+            } catch (Rexx.RexxException x) {
+                check("thrown condition's name", x.condition(), "USER BADCONFIG");
+                check("thrown condition's code", x.code(), 0L);
+                check("thrown condition thrown", x.thrown(), true);
+                check("thrown condition's description", x.description(), "missing key 'port' in app.yaml");
+                check("thrown condition's additional", x.additional(), List.of("port", "app.yaml"));
+                check("thrown condition's message", x.getMessage().startsWith("USER BADCONFIG: missing key 'port' in app.yaml"), true);
+                System.out.println("  (" + x.getMessage() + ")");
+            }
+            // raised (RAISE) in the code itself: the same, not thrown
+            try {
+                in.eval("raise user other description 'just raised'");
+                check("raised condition raised", false, true);
+            } catch (Rexx.RexxException x) {
+                check("raised condition's name", x.condition(), "USER OTHER");
+                check("raised condition not thrown", x.thrown(), false);
+                check("raised condition's description", x.description(), "just raised");
+                check("raised condition's additional", x.additional(), List.of());
+            }
+            // a SYNTAX error thrown with THROW SYNTAX: its code and substitutions
+            try {
+                in.eval("throw syntax 40.1 array ('FOO')");
+                check("thrown SYNTAX raised", false, true);
+            } catch (Rexx.RexxException x) {
+                check("thrown SYNTAX code", x.code(), 40001L);
+                check("thrown SYNTAX thrown", x.thrown(), true);
+                System.out.println("  (" + x.getMessage() + ")");
+            }
             check("works after errors", in.eval("return 'ok'"), "ok");
 
             // a deep recursion, on a thread with a large Java stack

@@ -199,7 +199,9 @@ default 1 MB, deep re-entry fails with Chicory's "call stack exhausted").
 - **Strings** cross as lists in linear memory (an `int32` count, then a
   length and the bytes of each; −1: no string), UTF-8 on the Java side. A
   result is `R` and the string, `N` (none), or `C` and the condition's
-  fields (`DecodeConditionInfo`).
+  fields (`DecodeConditionInfo`), then (19/11/2026, for `THROW`) its
+  `DESCRIPTION`, whether it was thrown (`THROWN`) and the items of its
+  `ADDITIONAL`, as strings.
 - **Java API** (`host/.../Rexx.java`): `Rexx.start()`,
   `rexx.newInterpreter()`, `callProgram(file, args...)`,
   `eval(code, args...)`, `close()`; conditions as `Rexx.RexxException`.

@@ -8,8 +8,8 @@ written in pure Java (no JNI, no native code): the Bytecode Alliance's
 continuation of [Chicory](https://github.com/dylibso/chicory), on which this
 project ran until 03/11/2026.
 
-**Status:** proof of concept (01/11/2026). ooRexx trunk r13545 (since
-18/11/2026; r13535 from 17/11/2026, r13532 earlier that day, r13514 from 15/11/2026, r13398 from 06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
+**Status:** proof of concept (01/11/2026). ooRexx trunk r13550 (since
+19/11/2026; r13545 from 18/11/2026, r13535 from 17/11/2026, r13532 earlier that day, r13514 from 15/11/2026, r13398 from 06/11/2026, r13389 earlier that day; r13381 from 05/11/2026, r13358 from 03/11/2026 and r13346 before, which the figures
 below were measured on unless they say otherwise), built
 for `wasm32-wasip1-threads` with wasi-sdk 34, runs on OpenJDK 21 with
 Endive 1.2.0 (Chicory 1.7.5 until 03/11/2026): multithreading (`START`, `GUARD ON WHEN`, `REPLY`),
@@ -113,6 +113,10 @@ the THROW instruction, with `THROW.testGroup`; r13540: TRACE's tests no longer
 depend on thread timing). `tilde` failed in the run because the user's `HOME`
 was not writable (its `SysFileCopy` to `~/`); with a writable `HOME` it passes
 (`suite-jvm-r13545-server-rerun-tilde.csv`).
+On ooRexx r13550 with test/trunk r13551 (19/11/2026,
+`suite-jvm-r13550-server.csv`): **413 of 413** in 3 min, 25,090 tests (r13546: the
+`Throw()` API, with its tests in `API/oo/METHOD` and `FUNCTION`; r13550: error 4.901
+for an uncaught thrown condition with a description).
 
 Up to test/trunk r13381 that count included, as passed with no tests, the
 groups the suite restricts to Unix (`SysUnix`, `tilde`, `SysGetMessage`,
@@ -147,7 +151,7 @@ The full report is in [`docs/poc-20261101.md`](docs/poc-20261101.md)
 ```
 
 Needs `svn`, `git`, `cmake`, `make`, Java 11 or later (22 or later for the jar's fallback without `Unsafe`) and Maven, and network
-access (wasi-sdk 34, ooRexx trunk r13545 from SourceForge,
+access (wasi-sdk 34, ooRexx trunk r13550 from SourceForge,
 [`oorexxwasm`](https://github.com/JosepMariaBlasco/oorexxwasm)'s generic
 WebAssembly layer, its `patches/0001-wasm-generic-layer.patch`, from the
 commit `OOREXXWASM_REV` in `build.sh`, BSF4ooRexx's SVN `branches/850` at
@@ -239,7 +243,11 @@ try (Rexx rexx = Rexx.start();
 Each call runs on the calling Java thread, from any number of threads at
 once; a result is a string (`null`: none), and a condition, normally a
 SYNTAX error, is thrown as `Rexx.RexxException` (code, error text, program,
-line). Several interpreter instances can be open at once, each with its own
+line). A condition that a `THROW` (ooRexx 5.3.0, r13541) leaves uncaught goes
+from caller to caller out of the program and arrives as it is, not as the error
+4.1 or 4.901 that `rexxj` shows for it: `condition()` (`USER BADCONFIG`),
+`description()`, `additional()` (the items of its `ADDITIONAL`, as strings) and
+`thrown()`; its message is the name and the description. Several interpreter instances can be open at once, each with its own
 `.local`. The module runs as `rexx --orx-wasm-embedded`, which waits for
 calls; how calls enter it (a pthread per call, handed by `thread-spawn` to
 the calling Java thread, attached to the instance) is in

@@ -37,29 +37,45 @@ import java.util.concurrent.*;
  */
 public final class Rexx implements AutoCloseable {
 
-    /** A condition (normally a SYNTAX error) that ended a call into Rexx. */
+    /**
+     * A condition that ended a call into Rexx: normally a SYNTAX error, or a condition
+     * that a {@code THROW} (or a {@code RAISE}) left uncaught, which arrives as it is
+     * ({@code USER BADCONFIG}, with its description and its additional information),
+     * not as the error 4.1 or 4.901 it would be at the top of a program.
+     */
     public static final class RexxException extends RuntimeException {
-        private final String condition, errorText, program;
+        private final String condition, errorText, program, description;
         private final long code, rc, line;
+        private final boolean thrown;
+        private final List<String> additional;
 
         RexxException(String condition, long code, long rc, String errorText, String message,
-                      String program, long line) {
-            super(describe(condition, code, errorText, message, program, line));
+                      String program, long line, String description, boolean thrown,
+                      List<String> additional) {
+            super(describe(condition, code, errorText, message, program, line, description));
             this.condition = condition; this.code = code; this.rc = rc;
             this.errorText = errorText; this.program = program; this.line = line;
+            this.description = description; this.thrown = thrown;
+            this.additional = Collections.unmodifiableList(new ArrayList<>(additional));
         }
 
         private static String describe(String condition, long code, String errorText, String message,
-                                       String program, long line) {
+                                       String program, long line, String description) {
             StringBuilder b = new StringBuilder();
-            if (code != 0) b.append("Error ").append(code / 1000).append('.').append(code % 1000).append(": ");
-            else if (condition != null) b.append(condition).append(": ");
-            b.append(message != null ? message : errorText != null ? errorText : "");
+            if (code != 0) {
+                b.append("Error ").append(code / 1000).append('.').append(code % 1000).append(": ");
+                b.append(message != null ? message : errorText != null ? errorText : "");
+            } else {
+                // any other condition: its name, and its description if it has one
+                if (condition != null) b.append(condition);
+                if (description != null && !description.isEmpty())
+                    b.append(condition != null ? ": " : "").append(description);
+            }
             if (program != null) b.append(" (").append(program).append(line > 0 ? ", line " + line : "").append(')');
             return b.toString();
         }
 
-        /** The condition's name ({@code SYNTAX}). */
+        /** The condition's name ({@code SYNTAX}, {@code USER BADCONFIG}...). */
         public String condition() { return condition; }
         /** The full error code, major * 1000 + minor (40.1 is 40001); 0 if none. */
         public long code() { return code; }
@@ -71,6 +87,16 @@ public final class Rexx implements AutoCloseable {
         public String program() { return program; }
         /** The line where it was raised; 0 if unknown. */
         public long line() { return line; }
+        /** The condition's {@code DESCRIPTION} as a string; {@code null} if it has none. */
+        public String description() { return description; }
+        /** Whether the condition was thrown ({@code THROW}, its {@code THROWN} entry), not raised. */
+        public boolean thrown() { return thrown; }
+        /**
+         * The items of the condition's {@code ADDITIONAL} array as strings ({@code null}
+         * for an omitted one); empty if it has none. For SYNTAX, the values substituted
+         * into the message.
+         */
+        public List<String> additional() { return additional; }
     }
 
     /** An ooRexx interpreter instance. Closing it terminates it. */
@@ -107,8 +133,12 @@ public final class Rexx implements AutoCloseable {
             switch (r.get(0)) {
                 case "R": return r.get(1);
                 case "N": return null;
-                case "C": throw new RexxException(r.get(1), num(r.get(2)), num(r.get(3)),
-                                                  r.get(4), r.get(5), r.get(6), num(r.get(7)));
+                case "C": {
+                    int n = (int) num(r.get(10));
+                    throw new RexxException(r.get(1), num(r.get(2)), num(r.get(3)),
+                                            r.get(4), r.get(5), r.get(6), num(r.get(7)),
+                                            r.get(8), "1".equals(r.get(9)), r.subList(11, 11 + n));
+                }
                 default: throw new IllegalStateException(r.size() > 1 ? r.get(1) : r.toString());
             }
         }

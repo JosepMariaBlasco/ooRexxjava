@@ -224,8 +224,28 @@ static int32_t inString(const char *list, int i, const char **s)
     }
 }
 
+/* An object of a condition object's entry as a string (its string value), or a missing
+   string if it has no such entry. */
+static void outEntry(Out *o, RexxThreadContext *tc, RexxObjectPtr v)
+{
+    if (v == NULLOBJECT)
+    {
+        outString(o, NULL, -1);
+    }
+    else
+    {
+        outRexxString(o, tc, tc->ObjectToString(v));
+    }
+}
+
 /* The result of a call, as a string list: "R" and the result; "N" (no result); or
-   "C" and the condition's name, code, rc, error text, message, program and line. */
+   "C" and the condition's name, code, rc, error text, message, program and line, then
+   its DESCRIPTION, "1" if it was thrown (THROW, ooRexx 5.3.0's THROWN entry) else "0",
+   and the number of items of its ADDITIONAL array followed by each one (a missing
+   string for an omitted item, and for a DESCRIPTION the condition does not have). A
+   condition that a THROW or a RAISE left uncaught arrives here as it is (USER
+   BADCONFIG, its description and its ADDITIONAL), not as the error 4.1 or 4.901 that
+   it would be at the top of a program. */
 static char *result(RexxThreadContext *tc, RexxObjectPtr r)
 {
     Out o;
@@ -244,6 +264,22 @@ static char *result(RexxThreadContext *tc, RexxObjectPtr r)
         outRexxString(&o, tc, c.message);
         outRexxString(&o, tc, c.program);
         outNumber(&o, (wholenumber_t)c.position);
+        outEntry(&o, tc, tc->DirectoryAt(info, "DESCRIPTION"));
+        outCString(&o, tc->DirectoryAt(info, "THROWN") == tc->True() ? "1" : "0");
+        RexxObjectPtr add = tc->DirectoryAt(info, "ADDITIONAL");
+        if (add != NULLOBJECT && tc->IsArray(add))
+        {
+            size_t last = tc->ArraySize((RexxArrayObject)add);
+            outNumber(&o, (wholenumber_t)last);
+            for (size_t i = 1; i <= last; i++)
+            {
+                outEntry(&o, tc, tc->ArrayAt((RexxArrayObject)add, i));
+            }
+        }
+        else
+        {
+            outNumber(&o, 0);
+        }
         tc->ClearCondition();
     }
     else if (r == NULLOBJECT)
