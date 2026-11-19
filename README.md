@@ -457,6 +457,10 @@ of two; `TEST_TRACE_REPLY` then gets its late lines. `TraceObject~new` appends
 the object to the collector before `RexxActivation::createTraceObject` fills
 it, and the test reads the collector while REPLY's threads still trace. On
 Linux it passes (seven runs of seven).
+On ooRexx r13550 with test/trunk r13551 (19/11/2026,
+`results/suite-jvm-r13550-windows-java25-server.csv`, run 44553328293):
+**401 of 413**, 25,090 tests, 31 failures, 2 errors: the usual twelve groups
+(`TRACE` passed this time; `SysSleep` failed again, timing).
 
 Endive's WASI reads files' attributes through a view Windows does not have
 (`"unix:*"`), and every `stat` failed there; `host/.../WinWasi.java` replaces its
